@@ -51,8 +51,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     const name = document.getElementById("name").value.trim();
 
     if (!email || !password || !name) {
-        showToast("Email, Password, and Full Name are required.", "error");
-        return;
+        return showToast("Email, Password, and Full Name are required.", "error");
     }
 
     const userData = {
@@ -66,7 +65,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
         status: "open",
         partner_uid: null,
         interests_received: [],
-        interests_sent: [] // New tracking field
+        interests_sent: []
     };
 
     try {
@@ -107,18 +106,17 @@ async function loadUserProfile(uid) {
     if (docSnap.exists()) {
         currentUserProfile = docSnap.data();
 
-        // Safety initialization for older accounts
         if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
         if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
 
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
 
-        if (currentUserProfile.status === "teamed") {
+        if (currentUserProfile.status === "teamed_up") {
             document.getElementById("partner-alert").classList.remove("hidden");
             document.querySelector(".tab-bar").classList.add("hidden");
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false, false);
+            fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false);
         } else {
             loadAllMembers();
             loadInterests();
@@ -129,7 +127,7 @@ async function loadUserProfile(uid) {
 // Populate the "My Profile" tab form
 function populateProfileForm(data) {
     document.getElementById("edit_name").value = data.name || "";
-    document.getElementById("edit_exp").value = data.exp || "0-4";
+    document.getElementById("edit_exp").value = data.exp || "5+";
     document.getElementById("edit_city").value = data.city || "";
     document.getElementById("edit_background").value = data.background || "Tech";
     document.getElementById("edit_domain").value = data.current_domain || "";
@@ -172,7 +170,7 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
 });
 
 // Central Render Function for DOM manipulation
-function renderUserCards(usersDataArray, containerId, allowActions = true, isIncomingInterest = false) {
+function renderUserCards(usersDataArray, containerId, allowActions = true) {
     const container = document.getElementById(containerId);
     if (!usersDataArray || usersDataArray.length === 0) {
         container.innerHTML = "<p class='text-muted'>No members found in this category.</p>";
@@ -183,17 +181,23 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isInc
     usersDataArray.forEach((u) => {
         let actionButtons = '';
 
-        // Build Action Buttons based on status
-        if (isIncomingInterest) {
-            actionButtons = `
-                <button class="btn btn-primary" onclick="acceptInterest('${u.id}')">Accept</button>
-                <button class="btn btn-danger" onclick="rejectInterest('${u.id}')" style="margin-left: 5px;">Reject</button>
-            `;
-        } else if (allowActions) {
+        if (allowActions) {
+            const receivedInterests = currentUserProfile.interests_received || [];
             const sentInterests = currentUserProfile.interests_sent || [];
-            if (sentInterests.includes(u.id)) {
-                actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.6; cursor: not-allowed;">Pending Request...</button>`;
-            } else {
+
+            // Logic: If they sent you an interest, show Accept/Reject globally on any tab
+            if (receivedInterests.includes(u.id)) {
+                actionButtons = `
+                    <button class="btn btn-primary" onclick="acceptInterest('${u.id}')">Accept</button>
+                    <button class="btn btn-danger" onclick="rejectInterest('${u.id}')">Reject</button>
+                `;
+            }
+            // Logic: If you sent them an interest, show pending globally
+            else if (sentInterests.includes(u.id)) {
+                actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.5; border-color: rgba(255,255,255,0.2); color: #a1a1aa; cursor: not-allowed;">Request Pending</button>`;
+            }
+            // Default: Send interest
+            else {
                 actionButtons = `<button class="btn btn-outline" id="btn-send-${u.id}" onclick="sendInterest('${u.id}')">Send Interest</button>`;
             }
         }
@@ -202,12 +206,15 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isInc
         <div class="card user-card">
             <h4>${u.name} <span class="badge">${u.city || 'No City'}</span></h4>
             <div class="user-card-meta">
-                <div><strong>Exp:</strong> ${u.exp}</div>
-                <div><strong>Domain:</strong> ${u.current_domain}</div>
-                <div><strong>Background:</strong> ${u.background}</div>
-                <div><strong>Target:</strong> ${u.project_domain}</div>
+                <div><strong style="color:var(--primary)">Exp:</strong> ${u.exp}</div>
+                <div><strong style="color:var(--primary)">Work:</strong> ${u.current_domain}</div>
+                <div><strong style="color:var(--primary)">Background:</strong> ${u.background}</div>
+                <div><strong style="color:var(--primary)">Target:</strong> ${u.project_domain}</div>
             </div>
-            <p style="margin-top:10px;"><strong>Project Idea:</strong><br/> ${u.project_desc || '<span class="text-muted">None provided</span>'}</p>
+            <div style="margin-top:10px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                <strong style="color:var(--primary); font-size:0.875rem;">Project Idea:</strong><br/> 
+                <span style="font-size:0.95rem;">${u.project_desc || '<span class="text-muted">None provided</span>'}</span>
+            </div>
             <div class="user-card-actions">
                 ${actionButtons}
             </div>
@@ -217,7 +224,7 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isInc
 }
 
 // Fetch by UIDs (handles Firebase "in" query limits via chunking)
-async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, isIncomingInterest = false) {
+async function fetchAndRenderUsers(uidArray, containerId, allowActions = true) {
     if (!uidArray || uidArray.length === 0) return renderUserCards([], containerId);
 
     document.getElementById(containerId).innerHTML = "<p class='text-muted'>Loading profiles...</p>";
@@ -230,7 +237,7 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
         snap.forEach(docSnap => allUsers.push({ id: docSnap.id, ...docSnap.data() }));
     }
 
-    renderUserCards(allUsers, containerId, allowActions, isIncomingInterest);
+    renderUserCards(allUsers, containerId, allowActions);
 }
 
 // Direct Database Fetch for "All Members"
@@ -246,10 +253,10 @@ async function loadAllMembers() {
         }
     });
 
-    renderUserCards(allUsers, "all-results", true, false);
+    renderUserCards(allUsers, "all-results", true);
 }
 
-// Fetch AI Recos (FIXED: Handles both Arrays and JSON objects from n8n)
+// Fetch AI Recos 
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
     document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
     const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
@@ -264,40 +271,39 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
 
         let uidsArray = [];
         if (Array.isArray(matches)) {
-            uidsArray = matches; // Standard array
+            uidsArray = matches;
         } else if (matches && Array.isArray(matches.uids)) {
-            uidsArray = matches.uids; // n8n JSON wrapper object
+            uidsArray = matches.uids;
         }
 
-        fetchAndRenderUsers(uidsArray, "reco-results");
+        fetchAndRenderUsers(uidsArray, "reco-results", true);
     } catch (e) {
         showToast("Error connecting to AI", "error");
         document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
     }
 });
 
-// Load Interests
+// Load Interests Tab
 function loadInterests() {
     const received = currentUserProfile.interests_received || [];
-    fetchAndRenderUsers(received, "interests-results", false, true);
+    fetchAndRenderUsers(received, "interests-results", true);
 }
 
 // Window actions for inline onclicks
 window.sendInterest = async (targetUid) => {
     try {
-        // Update the target user's 'received' array
         await updateDoc(doc(db, "users", targetUid), { interests_received: arrayUnion(auth.currentUser.uid) });
-        // Update current user's 'sent' array
         await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_sent: arrayUnion(targetUid) });
 
-        // Update local state and instantly swap the button UI
         if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
         currentUserProfile.interests_sent.push(targetUid);
 
         const btns = document.querySelectorAll(`#btn-send-${targetUid}`);
         btns.forEach(btn => {
-            btn.innerText = "Pending Request...";
-            btn.style.opacity = "0.6";
+            btn.innerText = "Request Pending";
+            btn.style.opacity = "0.5";
+            btn.style.color = "#a1a1aa";
+            btn.style.borderColor = "rgba(255,255,255,0.2)";
             btn.style.cursor = "not-allowed";
             btn.disabled = true;
         });
@@ -308,35 +314,34 @@ window.sendInterest = async (targetUid) => {
 
 window.acceptInterest = async (requesterUid) => {
     try {
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { status: "teamed", partner_uid: requesterUid });
-        await updateDoc(doc(db, "users", requesterUid), { status: "teamed", partner_uid: auth.currentUser.uid });
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { status: "teamed_up", partner_uid: requesterUid });
+        await updateDoc(doc(db, "users", requesterUid), { status: "teamed_up", partner_uid: auth.currentUser.uid });
 
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: "", status: "teamed" })
+            body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: "", status: "teamed_up" })
         });
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: requesterUid, combinedText: "", status: "teamed" })
+            body: JSON.stringify({ uid: requesterUid, combinedText: "", status: "teamed_up" })
         });
 
-        showToast("Team successfully formed!");
+        showToast("Team successfully formed! Reloading...");
         setTimeout(() => window.location.reload(), 1500);
     } catch (e) { showToast("Failed to form team", "error"); }
 };
 
 window.rejectInterest = async (requesterUid) => {
     try {
-        // Remove from current user's received
         await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_received: arrayRemove(requesterUid) });
-        // Remove from requester's sent
         await updateDoc(doc(db, "users", requesterUid), { interests_sent: arrayRemove(auth.currentUser.uid) });
 
-        // Update local state and UI
         currentUserProfile.interests_received = currentUserProfile.interests_received.filter(id => id !== requesterUid);
-        loadInterests(); // refresh tab
+
+        loadInterests();
+        loadAllMembers();
 
         showToast("Interest rejected.");
     } catch (e) { showToast("Failed to reject interest", "error"); }
