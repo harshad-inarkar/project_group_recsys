@@ -316,9 +316,11 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-// Fetch AI Recos (FIXED: Aggressively parses n8n's nested JSON formats)
+/// Fetch AI Recos (FIXED: Ultimate Fallback Parser for n8n JSON)
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
-    document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
+    const recoContainer = document.getElementById("reco-results");
+    recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
+
     const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
 
     try {
@@ -327,39 +329,51 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: combinedText })
         });
-        const matches = await res.json();
 
-        let uidsArray = [];
+        const rawResponse = await res.json();
+        console.log("N8N Raw Response:", rawResponse); // Added for console debugging
 
-        // Format 1: n8n array wrapper -> [ { "uids": ["id1", "id2"] } ]
-        if (Array.isArray(matches) && matches.length > 0 && matches[0].uids) {
-            uidsArray = matches[0].uids;
+        let extractedUids = [];
+
+        // Recursive function to aggressively find UIDs anywhere in the n8n payload
+        function extractUids(obj) {
+            if (!obj) return;
+
+            // If it's a string that looks like a Firebase UID (typically 28 alphanumeric chars)
+            if (typeof obj === 'string' && obj.length > 20 && /^[a-zA-Z0-9_-]+$/.test(obj)) {
+                extractedUids.push(obj);
+            }
+            // If it's an array, scan every item
+            else if (Array.isArray(obj)) {
+                obj.forEach(extractUids);
+            }
+            // If it's an object, check its keys and values
+            else if (typeof obj === 'object') {
+                if (obj.uid && typeof obj.uid === 'string') {
+                    extractedUids.push(obj.uid); // Found a direct uid key
+                }
+                Object.values(obj).forEach(extractUids); // Scan all other nested properties
+            }
         }
-        // Format 2: Direct string array -> ["id1", "id2"]
-        else if (Array.isArray(matches) && typeof matches[0] === 'string') {
-            uidsArray = matches;
-        }
-        // Format 3: Standard object wrapper -> { "uids": ["id1", "id2"] }
-        else if (matches && Array.isArray(matches.uids)) {
-            uidsArray = matches.uids;
-        }
 
-        // Safety Clean: Ensure Firestore only gets valid string IDs
-        uidsArray = (uidsArray || []).filter(id => typeof id === 'string');
+        // Run the extractor
+        extractUids(rawResponse);
 
-        // Check if there are actual valid IDs before querying Firebase
-        if (uidsArray.length === 0) {
-            document.getElementById("reco-results").innerHTML = "<p class='text-muted'>No active AI matches found at this time.</p>";
+        // Clean the array: Remove duplicates and remove the user's own UID
+        let finalUidsArray = [...new Set(extractedUids)].filter(id => id !== auth.currentUser.uid);
+
+        if (finalUidsArray.length === 0) {
+            recoContainer.innerHTML = "<p class='text-muted'>No active AI matches found. Try updating your profile description!</p>";
             return;
         }
 
-        // Pass 'true' so the 'Send Interest' buttons render correctly
-        fetchAndRenderUsers(uidsArray, "reco-results", true);
+        // Fetch up to Top 5 matches from Firebase and display them
+        fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
 
     } catch (e) {
         console.error("AI Fetch Error:", e);
-        showToast("Error connecting to AI", "error");
-        document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
+        showToast("Error connecting to AI. Check console.", "error");
+        recoContainer.innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
     }
 });
 
