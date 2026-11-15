@@ -94,19 +94,6 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     }
 });
 
-// Login
-document.getElementById("btn-login").addEventListener("click", async () => {
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
-    if (!email || !password) return showToast("Enter email and password", "error");
-
-    try {
-        await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-        showToast("Login failed: " + error.message, "error");
-    }
-});
-
 // Load Profile Data
 async function loadUserProfile(uid) {
     try {
