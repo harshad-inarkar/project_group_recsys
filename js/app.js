@@ -237,9 +237,9 @@ function renderUserCards(usersDataArray, containerId, allowActions = true) {
             <h4>${u.name} <span class="badge">${u.city || 'No City'}</span></h4>
             <div class="user-card-meta">
                 <div><strong style="color:var(--primary)">Exp:</strong> ${u.exp}</div>
-                <div><strong style="color:var(--primary)">Work:</strong> ${u.current_domain}</div>
+                <div><strong style="color:var(--primary)">Work Domain:</strong> ${u.current_domain}</div>
                 <div><strong style="color:var(--primary)">Background:</strong> ${u.background}</div>
-                <div><strong style="color:var(--primary)">Target:</strong> ${u.project_domain}</div>
+                <div><strong style="color:var(--primary)">Project Domain:</strong> ${u.project_domain}</div>
             </div>
             <div style="margin-top:10px; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
                 <strong style="color:var(--primary); font-size:0.875rem;">Project Idea:</strong><br/> 
