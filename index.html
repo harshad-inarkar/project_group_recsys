@@ -8,19 +8,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            /* Teal & Dark Theme Palette */
+            var(--primary): #14b8a6;
             --primary: #14b8a6;
-            /* Teal 500 */
             --primary-hover: #0d9488;
-            /* Teal 600 */
             --bg: #09090b;
-            /* Super Dark Background (Zinc 950) */
             --card-bg: rgba(24, 24, 27, 0.65);
-            /* Glass Background */
             --text-main: #f4f4f5;
-            /* Off-White Text */
             --text-muted: #a1a1aa;
-            /* Muted Text */
             --border: rgba(255, 255, 255, 0.1);
             --success: #10b981;
             --danger: #f43f5e;
@@ -44,7 +38,6 @@
             display: none !important;
         }
 
-        /* Typography & Layout */
         h2,
         h3,
         h4 {
@@ -179,6 +172,11 @@
             border-bottom: 1px solid var(--border);
             padding-bottom: 10px;
             overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .tab-bar::-webkit-scrollbar {
+            display: none;
         }
 
         .tab-bar button {
@@ -191,6 +189,7 @@
             border-radius: 6px;
             white-space: nowrap;
             transition: 0.2s;
+            position: relative;
         }
 
         .tab-bar button:hover {
@@ -202,6 +201,16 @@
             background-color: rgba(20, 184, 166, 0.15);
             color: var(--primary);
             border: 1px solid rgba(20, 184, 166, 0.3);
+        }
+
+        .red-dot {
+            color: var(--danger);
+            font-size: 1.5rem;
+            line-height: 0;
+            position: absolute;
+            top: 12px;
+            right: -2px;
+            text-shadow: 0 0 5px rgba(244, 63, 94, 0.5);
         }
 
         /* Toast Notifications */
@@ -286,13 +295,11 @@
 </head>
 
 <body>
-
     <div id="toast-container"></div>
 
     <!-- Auth Section -->
     <div id="auth-section" class="card auth-box">
         <h2 style="text-align: center; margin-bottom: 24px;">Welcome</h2>
-
         <div class="form-group">
             <label for="email">Email Address <span style="color:var(--danger)">*</span></label>
             <input type="email" id="email" placeholder="you@example.com" required>
@@ -301,7 +308,6 @@
             <label for="password">Password <span style="color:var(--danger)">*</span></label>
             <input type="password" id="password" placeholder="••••••••" required>
         </div>
-
         <div class="flex-between" style="gap: 12px; margin-top: 24px;">
             <button id="btn-login" class="btn btn-primary">Login</button>
             <button id="btn-toggle-register" class="btn btn-outline">Need an account?</button>
@@ -310,12 +316,9 @@
         <div id="register-fields" class="hidden"
             style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 24px;">
             <h3>Create Profile</h3>
-            <div class="form-group">
-                <label for="name">Full Name <span style="color:var(--danger)">*</span></label>
-                <input type="text" id="name" placeholder="Jane Doe" required>
-            </div>
-            <div class="form-group">
-                <label for="exp">Experience</label>
+            <div class="form-group"><label for="name">Full Name <span style="color:var(--danger)">*</span></label><input
+                    type="text" id="name" required></div>
+            <div class="form-group"><label for="exp">Experience</label>
                 <select id="exp">
                     <option value="5+">5+</option>
                     <option value="10+">10+</option>
@@ -323,29 +326,18 @@
                     <option value="20+">20+</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label for="city">City</label>
-                <input type="text" id="city" placeholder="e.g. Mumbai">
-            </div>
-            <div class="form-group">
-                <label for="background">Background</label>
+            <div class="form-group"><label for="city">City</label><input type="text" id="city"></div>
+            <div class="form-group"><label for="background">Background</label>
                 <select id="background">
                     <option value="Tech">Tech</option>
                     <option value="Non-Tech">Non-Tech</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label for="domain">Work Domain</label>
-                <input type="text" id="domain" placeholder="e.g. Finance, Healthcare">
+            <div class="form-group"><label for="domain">Work Domain</label><input type="text" id="domain"></div>
+            <div class="form-group"><label for="proj_domain">Project Domain</label><input type="text" id="proj_domain">
             </div>
-            <div class="form-group">
-                <label for="proj_domain">Project Domain</label>
-                <input type="text" id="proj_domain" placeholder="e.g. Data Science">
-            </div>
-            <div class="form-group">
-                <label for="proj_desc">Project Idea</label>
-                <textarea id="proj_desc" rows="3" placeholder="Describe the project you want to build..."></textarea>
-            </div>
+            <div class="form-group"><label for="proj_desc">Project Idea</label><textarea id="proj_desc"
+                    rows="3"></textarea></div>
             <button id="btn-register" class="btn btn-primary" style="margin-top: 10px;">Register & Create
                 Profile</button>
         </div>
@@ -360,17 +352,25 @@
         </div>
 
         <div class="tab-bar">
-            <button class="tab-btn active" onclick="showTab('tab-recommendations', this)">AI Recommendations</button>
-            <button class="tab-btn" onclick="showTab('tab-all', this)">All Members</button>
-            <button class="tab-btn" onclick="showTab('tab-interests', this)">Interests Received</button>
-            <button class="tab-btn" onclick="showTab('tab-profile', this)">My Profile</button>
+            <button class="tab-btn active" onclick="showTab('tab-recommendations', this)">AI Recos</button>
+            <button class="tab-btn" onclick="showTab('tab-random', this)">Random</button>
+            <button class="tab-btn" onclick="showTab('tab-all', this)">All Open</button>
+            <button class="tab-btn" onclick="showTab('tab-interests', this)">
+                Received <span id="nav-red-dot" class="red-dot hidden">•</span>
+            </button>
+            <button class="tab-btn" onclick="showTab('tab-sent', this)">Sent</button>
+            <button class="tab-btn" onclick="showTab('tab-projects', this)">Projects</button>
+            <button class="tab-btn" onclick="showTab('tab-profile', this)">Profile</button>
+            <!-- Admin Tab -->
+            <button class="tab-btn hidden" id="tab-btn-admin" onclick="showTab('tab-admin', this)"
+                style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
         <!-- Paired Alert -->
         <div id="partner-alert" class="hidden card"
             style="background-color: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
-            <h3 style="color: var(--success);">🎉 You are teamed up!</h3>
-            <p class="text-muted">You have successfully found a partner. Other tabs have been disabled.</p>
+            <h3 style="color: var(--success);">🎉 You are teamed up! (Or Solo)</h3>
+            <p class="text-muted">You are no longer accepting requests. Browse the Projects tab to see other teams.</p>
             <div id="partner-details" style="margin-top: 20px;"></div>
         </div>
 
@@ -379,7 +379,7 @@
             <div class="flex-between" style="margin-bottom: 20px;">
                 <div>
                     <h3>Top AI Matches</h3>
-                    <p class="text-muted">Members tailored to your project and background.</p>
+                    <p class="text-muted">Members tailored to your project.</p>
                 </div>
                 <button id="btn-get-reco" class="btn btn-primary" style="width: auto;">Refresh Matches</button>
             </div>
@@ -388,27 +388,57 @@
             </div>
         </div>
 
+        <div id="tab-random" class="tab-content hidden">
+            <h3>Your Random Matches</h3>
+            <p class="text-muted">Generated uniformly by the admin.</p>
+            <div id="random-results"></div>
+        </div>
+
         <div id="tab-all" class="tab-content hidden">
             <h3>All Open Members</h3>
-            <p class="text-muted">Browse all members currently looking for a team.</p>
             <div id="all-results"></div>
         </div>
 
         <div id="tab-interests" class="tab-content hidden">
             <h3>Interests Received</h3>
-            <p class="text-muted">Members who want to team up with you.</p>
             <div id="interests-results"></div>
+        </div>
+
+        <div id="tab-sent" class="tab-content hidden">
+            <h3>Requests Sent</h3>
+            <p class="text-muted">Waiting for these members to respond.</p>
+            <div id="sent-results"></div>
+        </div>
+
+        <div id="tab-projects" class="tab-content hidden">
+            <div class="flex-between" style="margin-bottom: 20px;">
+                <div>
+                    <h3>Finalized Projects & Teams</h3>
+                </div>
+                <button onclick="loadAllProjects()" class="btn btn-outline"
+                    style="width: auto; padding: 4px 10px; font-size: 0.85rem;">Refresh</button>
+            </div>
+            <div id="projects-results"></div>
+        </div>
+
+        <div id="tab-admin" class="tab-content hidden">
+            <div class="card" style="border-color: var(--danger);">
+                <h3 style="color: var(--danger);">Admin Dashboard</h3>
+                <p class="text-muted" style="margin-bottom: 20px;">Generate a new round of 5 random matches for every
+                    currently "open" member.</p>
+                <button id="btn-admin-random" class="btn btn-danger">Generate Random Round for All</button>
+            </div>
         </div>
 
         <div id="tab-profile" class="tab-content hidden">
             <div class="card">
                 <h3>Update Your Information</h3>
                 <div class="form-group">
-                    <label>Status</label>
+                    <label>Status (Changes visibility)</label>
                     <select id="edit_status">
-                        <option value="open">Open</option>
-                        <option value="solo">Solo</option>
-                        <option value="teamed_up">Teamed Up</option>
+                        <option value="open">Open (Looking for team)</option>
+                        <option value="solo">Solo (Working Alone)</option>
+                        <option value="teamed_up" disabled>Teamed Up</option>
                     </select>
                 </div>
                 <div class="form-group"><label>Full Name</label><input type="text" id="edit_name" required></div>
@@ -431,13 +461,11 @@
                 <div class="form-group"><label>Project Domain</label><input type="text" id="edit_proj_domain"></div>
                 <div class="form-group"><label>Project Idea</label><textarea id="edit_proj_desc" rows="3"></textarea>
                 </div>
-
                 <button id="btn-update-profile" class="btn btn-primary" style="margin-top: 15px;">Save Changes</button>
             </div>
         </div>
     </div>
 
-    <!-- SCRIPT PATH FIXED HERE -->
     <script type="module" src="js/app.js"></script>
     <script>
         function showTab(tabId, btnElement) {
