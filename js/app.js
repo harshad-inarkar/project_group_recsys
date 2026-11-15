@@ -34,9 +34,16 @@ function showToast(message, type = "success") {
 // Handle UI State based on login
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        document.getElementById("auth-section").classList.add("hidden");
-        document.getElementById("app-section").classList.remove("hidden");
-        await loadUserProfile(user.uid);
+        try {
+            document.getElementById("auth-section").classList.add("hidden");
+            document.getElementById("app-section").classList.remove("hidden");
+            document.getElementById("welcome-msg").innerText = "Loading profile data...";
+
+            await loadUserProfile(user.uid);
+        } catch (error) {
+            console.error("Critical Auth Error:", error);
+            showToast("Error loading dashboard: " + error.message, "error");
+        }
     } else {
         document.getElementById("auth-section").classList.remove("hidden");
         document.getElementById("app-section").classList.add("hidden");
@@ -102,10 +109,18 @@ document.getElementById("btn-login").addEventListener("click", async () => {
 
 // Load Profile Data
 async function loadUserProfile(uid) {
-    const docSnap = await getDoc(doc(db, "users", uid));
-    if (docSnap.exists()) {
+    try {
+        const docSnap = await getDoc(doc(db, "users", uid));
+
+        if (!docSnap.exists()) {
+            showToast("User profile not found in database. Please register again.", "error");
+            await auth.signOut();
+            return;
+        }
+
         currentUserProfile = docSnap.data();
 
+        // Safety initialization for arrays
         if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
         if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
 
@@ -116,13 +131,47 @@ async function loadUserProfile(uid) {
             document.getElementById("partner-alert").classList.remove("hidden");
             document.querySelector(".tab-bar").classList.add("hidden");
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false);
+            await fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false);
         } else {
-            loadAllMembers();
+            await loadAllMembers();
             loadInterests();
+        }
+    } catch (error) {
+        console.error("Error fetching profile:", error);
+
+        // Check if it's a permissions error
+        if (error.code === 'permission-denied') {
+            showToast("Database Access Denied. Check Firebase Rules!", "error");
+        } else {
+            showToast("Failed to load user data.", "error");
         }
     }
 }
+
+
+
+// Update the Login Button to show a loading state
+document.getElementById("btn-login").addEventListener("click", async (e) => {
+    const email = document.getElementById("email").value;
+    const password = document.getElementById("password").value;
+    const btn = e.target;
+
+    if (!email || !password) return showToast("Enter email and password", "error");
+
+    btn.innerText = "Logging in...";
+    btn.disabled = true;
+
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+        showToast("Login failed: " + error.message, "error");
+    } finally {
+        btn.innerText = "Login";
+        btn.disabled = false;
+    }
+});
+
+
 
 // Populate the "My Profile" tab form
 function populateProfileForm(data) {
