@@ -8,7 +8,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            var(--primary): #14b8a6;
             --primary: #14b8a6;
             --primary-hover: #0d9488;
             --bg: #09090b;
@@ -57,7 +56,6 @@
             align-items: center;
         }
 
-        /* Forms & Inputs */
         .form-group {
             margin-bottom: 15px;
         }
@@ -103,7 +101,6 @@
             color: white;
         }
 
-        /* Buttons */
         .btn {
             display: inline-block;
             padding: 10px 16px;
@@ -147,7 +144,6 @@
             background-color: rgba(244, 63, 94, 0.2);
         }
 
-        /* Modern Glass Cards */
         .card {
             background: var(--card-bg);
             backdrop-filter: blur(12px);
@@ -164,7 +160,6 @@
             margin: 40px auto;
         }
 
-        /* Tab Navigation */
         .tab-bar {
             display: flex;
             gap: 10px;
@@ -213,7 +208,6 @@
             text-shadow: 0 0 5px rgba(244, 63, 94, 0.5);
         }
 
-        /* Toast Notifications */
         #toast-container {
             position: fixed;
             bottom: 20px;
@@ -247,7 +241,6 @@
             color: #d1fae5;
         }
 
-        /* User Card Specifics */
         .user-card {
             transition: border-color 0.2s;
         }
@@ -297,7 +290,6 @@
 <body>
     <div id="toast-container"></div>
 
-    <!-- Auth Section -->
     <div id="auth-section" class="card auth-box">
         <h2 style="text-align: center; margin-bottom: 24px;">Welcome</h2>
         <div class="form-group">
@@ -343,7 +335,6 @@
         </div>
     </div>
 
-    <!-- Main App Section -->
     <div id="app-section" class="hidden">
         <div class="flex-between" style="margin-bottom: 24px;">
             <h2 id="welcome-msg"></h2>
@@ -355,18 +346,20 @@
             <button class="tab-btn active" onclick="showTab('tab-recommendations', this)">AI Recos</button>
             <button class="tab-btn" onclick="showTab('tab-random', this)">Random</button>
             <button class="tab-btn" onclick="showTab('tab-all', this)">All Open</button>
-            <button class="tab-btn" onclick="showTab('tab-interests', this)">
+
+            <!-- REQ 1: Red Dot hides on click using inline JS -->
+            <button class="tab-btn"
+                onclick="showTab('tab-interests', this); document.getElementById('nav-red-dot').classList.add('hidden');">
                 Received <span id="nav-red-dot" class="red-dot hidden">•</span>
             </button>
+
             <button class="tab-btn" onclick="showTab('tab-sent', this)">Sent</button>
             <button class="tab-btn" onclick="showTab('tab-projects', this)">Projects</button>
             <button class="tab-btn" onclick="showTab('tab-profile', this)">Profile</button>
-            <!-- Admin Tab -->
             <button class="tab-btn hidden" id="tab-btn-admin" onclick="showTab('tab-admin', this)"
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
-        <!-- Paired Alert -->
         <div id="partner-alert" class="hidden card"
             style="background-color: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
             <h3 style="color: var(--success);">🎉 You are teamed up! (Or Solo)</h3>
@@ -374,7 +367,6 @@
             <div id="partner-details" style="margin-top: 20px;"></div>
         </div>
 
-        <!-- Tabs -->
         <div id="tab-recommendations" class="tab-content">
             <div class="flex-between" style="margin-bottom: 20px;">
                 <div>

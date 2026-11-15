@@ -21,7 +21,6 @@ const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get
 
 let currentUserProfile = null;
 
-// Utility: Professional Toast
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
     const toast = document.createElement("div");
@@ -31,7 +30,6 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// Handle UI State
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
@@ -61,7 +59,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
         name: name, exp: document.getElementById("exp").value, city: document.getElementById("city").value,
         background: document.getElementById("background").value, current_domain: document.getElementById("domain").value,
         project_domain: document.getElementById("proj_domain").value, project_desc: document.getElementById("proj_desc").value,
-        status: "open", partner_uid: null, interests_received: [], interests_sent: [], random_matches: [], isAdmin: false
+        status: "open", partner_uid: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
     };
 
     try {
@@ -101,26 +99,26 @@ async function loadUserProfile(uid) {
         }
 
         currentUserProfile = docSnap.data();
+
+        // Safety initialization for older arrays
         if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
         if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
+        if (!currentUserProfile.interests_rejected) currentUserProfile.interests_rejected = [];
         if (!currentUserProfile.random_matches) currentUserProfile.random_matches = [];
 
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
 
-        // Req 4: Admin check
         if (currentUserProfile.isAdmin) {
             document.getElementById("tab-btn-admin").classList.remove("hidden");
         }
 
-        // Req 1: Red Dot check
         if (currentUserProfile.interests_received.length > 0) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         } else {
             document.getElementById("nav-red-dot").classList.add("hidden");
         }
 
-        // Lock UI if Solo or Teamed
         if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
             document.getElementById("partner-alert").classList.remove("hidden");
             document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -141,7 +139,7 @@ async function loadUserProfile(uid) {
             fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
         }
 
-        window.loadAllProjects(); // Expose globally and call
+        window.loadAllProjects();
     } catch (error) { console.error(error); showToast("Failed to load user data.", "error"); }
 }
 
@@ -169,7 +167,6 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     try {
         await updateDoc(doc(db, "users", auth.currentUser.uid), updatedData);
 
-        // Req 5: If going Solo, add to projects table
         if (updatedData.status === "solo") {
             await setDoc(doc(db, "projects", auth.currentUser.uid), {
                 type: "solo", member1_uid: auth.currentUser.uid, member1_name: updatedData.name,
@@ -201,12 +198,16 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
         if (allowActions) {
             const receivedInterests = currentUserProfile.interests_received || [];
             const sentInterests = currentUserProfile.interests_sent || [];
+            const rejectedInterests = currentUserProfile.interests_rejected || [];
 
             if (receivedInterests.includes(u.id)) {
                 actionButtons = `<button class="btn btn-primary" onclick="acceptInterest('${u.id}')">Accept</button>
-                                 <button class="btn btn-danger" onclick="rejectInterest('${u.id}')">Reject</button>`;
+                                 <button class="btn btn-danger" style="margin-left: 5px;" onclick="rejectInterest('${u.id}')">Reject</button>`;
             } else if (sentInterests.includes(u.id)) {
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Request Pending</button>`;
+            } else if (rejectedInterests.includes(u.id)) {
+                // REQ 2: Block sending to people who rejected you
+                actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.5; border-color: rgba(244,63,94,0.4); color: var(--danger); cursor: not-allowed;">Rejected</button>`;
             } else {
                 actionButtons = `<button class="btn btn-outline" id="btn-send-${u.id}" onclick="sendInterest('${u.id}')">Send Interest</button>`;
             }
@@ -240,7 +241,6 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
         const chunk = uidArray.slice(i, i + 10);
         const q = query(collection(db, "users"), where(documentId(), "in", chunk));
         const snap = await getDocs(q);
-        // Req 3: Ensure we NEVER render solo or teamed users in matching tabs
         snap.forEach(docSnap => {
             const data = docSnap.data();
             if (data.status === "open") allUsers.push({ id: docSnap.id, ...data });
@@ -259,25 +259,61 @@ async function loadAllMembers() {
     renderUserCards(allUsers, "all-results", true);
 }
 
-// Req 6: Fetch and display Projects
+// Req 6: Fetch and display Projects & Req 3: Edit Idea Logic
 window.loadAllProjects = async () => {
     const container = document.getElementById("projects-results");
     container.innerHTML = "<p class='text-muted'>Loading projects...</p>";
     const snap = await getDocs(collection(db, "projects"));
     let html = "";
-    snap.forEach(doc => {
-        const p = doc.data();
+
+    snap.forEach(docSnap => {
+        const p = docSnap.data();
+        const projectId = docSnap.id;
+
+        // REQ 3: Check if logged in user owns this project
+        const isMyProject = (auth.currentUser && (auth.currentUser.uid === p.member1_uid || auth.currentUser.uid === p.member2_uid));
+
+        let editHtml = "";
+        if (isMyProject) {
+            editHtml = `
+                <div style="margin-top:12px;">
+                    <textarea id="edit-proj-${projectId}" class="hidden" rows="3" style="width:100%; margin-bottom:10px;">${p.project_desc}</textarea>
+                    <button id="btn-edit-${projectId}" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.8rem; width: auto;" onclick="toggleEditProject('${projectId}')">Edit Idea</button>
+                    <button id="btn-save-${projectId}" class="btn btn-primary hidden" style="padding: 4px 10px; font-size: 0.8rem; width: auto;" onclick="saveProjectIdea('${projectId}')">Save Idea</button>
+                </div>
+            `;
+        }
+
         html += `<div class="card" style="border-left: 4px solid var(--primary);">
             <h4 style="color:var(--primary);">${p.type === 'team' ? '🤝 Team' : '👤 Solo Project'}</h4>
-            <p><strong>Members:</strong> ${p.type === 'team' ? p.member1_name + ' & ' + p.member2_name : p.member1_name}</p>
-            <div style="margin-top:10px; background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
+            <p style="margin: 5px 0 10px;"><strong>Members:</strong> ${p.type === 'team' ? p.member1_name + ' & ' + p.member2_name : p.member1_name}</p>
+            <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
                 <strong style="color:var(--primary); font-size:0.875rem;">Final Project Idea:</strong><br/> 
-                <span style="font-size:0.95rem;">${p.project_desc}</span>
+                <span id="text-proj-${projectId}" style="font-size:0.95rem; display:block; margin-top:5px;">${p.project_desc}</span>
+                ${editHtml}
             </div>
         </div>`;
     });
+
     if (html === "") html = "<p class='text-muted'>No projects finalized yet.</p>";
     container.innerHTML = html;
+};
+
+window.toggleEditProject = (projectId) => {
+    document.getElementById(`text-proj-${projectId}`).classList.add('hidden');
+    document.getElementById(`btn-edit-${projectId}`).classList.add('hidden');
+    document.getElementById(`edit-proj-${projectId}`).classList.remove('hidden');
+    document.getElementById(`btn-save-${projectId}`).classList.remove('hidden');
+};
+
+window.saveProjectIdea = async (projectId) => {
+    const newIdea = document.getElementById(`edit-proj-${projectId}`).value.trim();
+    if (!newIdea) return showToast("Idea cannot be empty", "error");
+    try {
+        await updateDoc(doc(db, "projects", projectId), { project_desc: newIdea });
+        showToast("Project Idea Updated!");
+        window.loadAllProjects(); // Refresh UI instantly
+    } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
 // AI Recos
@@ -309,13 +345,12 @@ window.sendInterest = async (targetUid) => {
             btn.innerText = "Request Pending"; btn.style.opacity = "0.5"; btn.disabled = true;
         });
         showToast("Interest sent!");
-        fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true); // Refresh sent tab
+        fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
     } catch (e) { showToast("Failed to send interest", "error"); }
 };
 
 window.acceptInterest = async (requesterUid) => {
     try {
-        // Req 5: Create Project Entry on Accept
         const requesterSnap = await getDoc(doc(db, "users", requesterUid));
         const requesterName = requesterSnap.exists() ? requesterSnap.data().name : "Unknown Member";
         const requesterProj = requesterSnap.exists() ? requesterSnap.data().project_desc : "";
@@ -337,18 +372,25 @@ window.acceptInterest = async (requesterUid) => {
     } catch (e) { showToast("Failed to form team", "error"); }
 };
 
+// REQ 2: Permanent Rejection Tracking
 window.rejectInterest = async (requesterUid) => {
     try {
+        // Remove from receiver (you)
         await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_received: arrayRemove(requesterUid) });
-        await updateDoc(doc(db, "users", requesterUid), { interests_sent: arrayRemove(auth.currentUser.uid) });
+        // Remove from sender and add to their rejected list
+        await updateDoc(doc(db, "users", requesterUid), {
+            interests_sent: arrayRemove(auth.currentUser.uid),
+            interests_rejected: arrayUnion(auth.currentUser.uid)
+        });
+
         currentUserProfile.interests_received = currentUserProfile.interests_received.filter(id => id !== requesterUid);
         loadInterests();
-        if (currentUserProfile.interests_received.length === 0) document.getElementById("nav-red-dot").classList.add("hidden");
+
         showToast("Interest rejected.");
     } catch (e) { showToast("Failed to reject", "error"); }
 };
 
-// Req 4: Admin Random Round Logic
+// Admin Random Round Logic
 document.getElementById("btn-admin-random").addEventListener("click", async (e) => {
     const btn = e.target;
     btn.innerText = "Processing..."; btn.disabled = true;
@@ -358,10 +400,9 @@ document.getElementById("btn-admin-random").addEventListener("click", async (e) 
         let openUsers = [];
         snapshot.forEach(doc => openUsers.push(doc.id));
 
-        // Assign 5 random UIDs to every user
         for (let uid of openUsers) {
             let others = openUsers.filter(id => id !== uid);
-            others = others.sort(() => 0.5 - Math.random()); // Simple Fisher-Yates shuffle
+            others = others.sort(() => 0.5 - Math.random());
             let random5 = others.slice(0, 5);
             await updateDoc(doc(db, "users", uid), { random_matches: random5 });
         }
