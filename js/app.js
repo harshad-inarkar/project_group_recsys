@@ -316,18 +316,31 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-// AI Recos
+// Fetch AI Recos (FIXED: Handles both Arrays and JSON objects from n8n)
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
     document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
+    const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
+
     try {
         const res = await fetch(WEBHOOK_GET_RECO, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: `${currentUserProfile.exp} ${currentUserProfile.city} ${currentUserProfile.current_domain} ${currentUserProfile.project_desc}` })
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: combinedText })
         });
         const matches = await res.json();
-        let uidsArray = Array.isArray(matches) ? matches : (matches.uids || []);
-        fetchAndRenderUsers(uidsArray, "reco-results", true);
-    } catch (e) { showToast("Error connecting to AI", "error"); }
+
+        let uidsArray = [];
+        if (Array.isArray(matches)) {
+            uidsArray = matches; // Standard array
+        } else if (matches && Array.isArray(matches.uids)) {
+            uidsArray = matches.uids; // n8n JSON wrapper object
+        }
+
+        fetchAndRenderUsers(uidsArray, "reco-results");
+    } catch (e) {
+        showToast("Error connecting to AI", "error");
+        document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
+    }
 });
 
 function loadInterests() {
