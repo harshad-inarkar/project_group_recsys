@@ -1,0 +1,262 @@
+{
+    "name": "project_group_recsys_final",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "embed-profile",
+                "responseMode": "lastNode",
+                "options": {}
+            },
+            "id": "07297f25-53b8-4792-b5e9-6b5387451a11",
+            "name": "Webhook: Embed Profile",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                880,
+                -80
+            ],
+            "webhookId": "9d975048-3ff2-4dde-a79a-20680700de64"
+        },
+        {
+            "parameters": {
+                "mode": "insert",
+                "pineconeIndex": {
+                    "__rl": true,
+                    "value": "project-group-index",
+                    "mode": "list",
+                    "cachedResultName": "project-group-index"
+                },
+                "options": {}
+            },
+            "id": "3b66e021-973b-4fc1-9d83-8fdc062679b3",
+            "name": "Pinecone Vector Store",
+            "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+            "typeVersion": 1.4,
+            "position": [
+                1184,
+                -80
+            ],
+            "credentials": {
+                "pineconeApi": {
+                    "id": "KF8UVjW4gyx6RwrT",
+                    "name": "Pinecone account"
+                }
+            }
+        },
+        {
+            "parameters": {},
+            "id": "71d331a2-3419-4930-ab6e-268190567c50",
+            "name": "Google Gemini Embeddings",
+            "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                1184,
+                128
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "UUzxMttUkKXfrMSe",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "options": {
+                    "metadata": {
+                        "metadataValues": [
+                            {
+                                "name": "uid",
+                                "value": "={{ $json.body.uid }}"
+                            },
+                            {
+                                "name": "status",
+                                "value": "={{ $json.body.status }}"
+                            }
+                        ]
+                    }
+                }
+            },
+            "id": "a7dc9267-571a-4e58-acf7-c78983f4fe6f",
+            "name": "Default Data Loader",
+            "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+            "typeVersion": 1,
+            "position": [
+                1328,
+                128
+            ]
+        },
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "get-recommendations",
+                "responseMode": "lastNode",
+                "options": {}
+            },
+            "id": "74fe2c77-8848-427f-8112-edd9831cf3d9",
+            "name": "Webhook: Get Reco",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                880,
+                320
+            ],
+            "webhookId": "eb9bdd4e-8954-4aad-a38c-3e2d8ad4e628"
+        },
+        {
+            "parameters": {
+                "mode": "retrieve",
+                "pineconeIndex": {
+                    "__rl": true,
+                    "value": "project-group-index",
+                    "mode": "list",
+                    "cachedResultName": "project-group-index"
+                },
+                "query": "={{ $json.body.combinedText }}",
+                "topK": 6,
+                "options": {
+                    "pineconeFilter": "{\"status\":{\"$eq\":\"open\"}}"
+                }
+            },
+            "id": "9b00fa92-4461-4ea5-8a4d-d7da51eab890",
+            "name": "Pinecone Vector Store1",
+            "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+            "typeVersion": 1.4,
+            "position": [
+                1184,
+                320
+            ],
+            "credentials": {
+                "pineconeApi": {
+                    "id": "KF8UVjW4gyx6RwrT",
+                    "name": "Pinecone account"
+                }
+            }
+        },
+        {
+            "parameters": {},
+            "id": "71c5b995-3611-440b-950e-350a8df36ff1",
+            "name": "Google Gemini Embeddings1",
+            "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                1184,
+                528
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "UUzxMttUkKXfrMSe",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const requestingUid = $('Webhook: Get Reco').item.json.body.uid;\nconst documents = $input.all();\n\nconst uids = documents\n  .map(doc => doc.json.metadata?.uid)\n  .filter(uid => uid && uid !== requestingUid)\n  .slice(0, 5);\n\nreturn { uids: uids };"
+            },
+            "id": "201f9e3f-8792-4697-bf66-dadd8213ce26",
+            "name": "Code: Filter Self",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1536,
+                320
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ $json.uids }}",
+                "options": {}
+            },
+            "id": "8a6c8caa-dfe7-4683-9abd-7ce411739e0a",
+            "name": "Respond to Webhook",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                1776,
+                320
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook: Embed Profile": {
+            "main": [
+                [
+                    {
+                        "node": "Pinecone Vector Store",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Google Gemini Embeddings": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Pinecone Vector Store",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Default Data Loader": {
+            "ai_document": [
+                [
+                    {
+                        "node": "Pinecone Vector Store",
+                        "type": "ai_document",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Webhook: Get Reco": {
+            "main": [
+                [
+                    {
+                        "node": "Pinecone Vector Store1",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Pinecone Vector Store1": {
+            "main": [
+                [
+                    {
+                        "node": "Code: Filter Self",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Google Gemini Embeddings1": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Pinecone Vector Store1",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Code: Filter Self": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Webhook",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

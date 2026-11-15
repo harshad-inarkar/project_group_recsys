@@ -1,5 +1,5 @@
 {
-  "name": "project_group_recsys_final",
+  "name": "project_group_recsys_qdrant",
   "nodes": [
     {
       "parameters": {
@@ -8,20 +8,20 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "07297f25-53b8-4792-b5e9-6b5387451a11",
+      "id": "1baa8189-1e4c-45ef-89a7-c917d3012bc4",
       "name": "Webhook: Embed Profile",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        880,
-        -80
+        0,
+        0
       ],
-      "webhookId": "9d975048-3ff2-4dde-a79a-20680700de64"
+      "webhookId": "a51d6847-0485-4c2b-927c-37602dbe8d8a"
     },
     {
       "parameters": {
         "mode": "insert",
-        "pineconeIndex": {
+        "qdrantCollection": {
           "__rl": true,
           "value": "project-group-index",
           "mode": "list",
@@ -29,30 +29,30 @@
         },
         "options": {}
       },
-      "id": "3b66e021-973b-4fc1-9d83-8fdc062679b3",
-      "name": "Pinecone Vector Store",
-      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
-      "typeVersion": 1.4,
+      "id": "5a0c0088-1de1-42ee-a15f-cbd2b89d1146",
+      "name": "Qdrant Vector Store",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1,
       "position": [
-        1184,
-        -80
+        304,
+        0
       ],
       "credentials": {
-        "pineconeApi": {
-          "id": "KF8UVjW4gyx6RwrT",
-          "name": "Pinecone account"
+        "qdrantApi": {
+          "id": "nPoDn3MiZxMDe89q",
+          "name": "Qdrant account"
         }
       }
     },
     {
       "parameters": {},
-      "id": "71d331a2-3419-4930-ab6e-268190567c50",
+      "id": "26a7957c-50f4-474d-926b-4d8a3dcda5f0",
       "name": "Google Gemini Embeddings",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1184,
-        128
+        304,
+        208
       ],
       "credentials": {
         "googlePalmApi": {
@@ -69,18 +69,22 @@
               {
                 "name": "uid",
                 "value": "={{ $json.body.uid }}"
+              },
+              {
+                "name": "status",
+                "value": "={{ $json.body.status }}"
               }
             ]
           }
         }
       },
-      "id": "a7dc9267-571a-4e58-acf7-c78983f4fe6f",
+      "id": "a1cbef12-18e4-436d-9961-0e35c84ab9b2",
       "name": "Default Data Loader",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1,
       "position": [
-        1328,
-        128
+        448,
+        208
       ]
     },
     {
@@ -88,13 +92,13 @@
         "chunkOverlap": 100,
         "options": {}
       },
-      "id": "55e03d22-4781-4bf7-832f-5a597b44b3b9",
+      "id": "d73741a7-05d9-4855-aab7-ff6dcb727179",
       "name": "Recursive Character Text Splitter",
       "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
       "typeVersion": 1,
       "position": [
-        1392,
-        512
+        512,
+        592
       ]
     },
     {
@@ -104,53 +108,53 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "74fe2c77-8848-427f-8112-edd9831cf3d9",
+      "id": "e96bdcb0-1db2-4019-8e34-5229d66a811d",
       "name": "Webhook: Get Reco",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        880,
-        320
+        0,
+        400
       ],
-      "webhookId": "eb9bdd4e-8954-4aad-a38c-3e2d8ad4e628"
+      "webhookId": "c17956d2-8145-4d32-8b9f-837b9461efd7"
     },
     {
       "parameters": {
         "mode": "load",
-        "pineconeIndex": {
+        "qdrantCollection": {
           "__rl": true,
           "value": "project-group-index",
           "mode": "list",
           "cachedResultName": "project-group-index"
         },
-        "prompt": "={{ $json.body.profile_text }}",
+        "prompt": "={{ $json.body.text }}",
         "topK": 6,
         "options": {}
       },
-      "id": "9b00fa92-4461-4ea5-8a4d-d7da51eab890",
-      "name": "Pinecone Vector Store1",
-      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
-      "typeVersion": 1.4,
+      "id": "d5d03ba5-3500-4f08-912a-9003ecc520eb",
+      "name": "Qdrant Vector Store Search",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1,
       "position": [
-        1184,
-        320
+        304,
+        400
       ],
       "credentials": {
-        "pineconeApi": {
-          "id": "KF8UVjW4gyx6RwrT",
-          "name": "Pinecone account"
+        "qdrantApi": {
+          "id": "nPoDn3MiZxMDe89q",
+          "name": "Qdrant account"
         }
       }
     },
     {
       "parameters": {},
-      "id": "71c5b995-3611-440b-950e-350a8df36ff1",
+      "id": "8439af92-7d8b-4acf-ac6e-492774ad06d9",
       "name": "Google Gemini Embeddings1",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1184,
-        528
+        304,
+        608
       ],
       "credentials": {
         "googlePalmApi": {
@@ -161,15 +165,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const requestingUid = $('Webhook: Get Reco').item.json.body.uid;\nconst documents = $input.all();\n\nconst uids = documents\n  .map(doc => doc.json.metadata?.uid)\n  .filter(uid => uid && uid !== requestingUid)\n  .slice(0, 5);\n\nreturn { uids: uids };"
+        "jsCode": "const requestingUid = $('Webhook: Get Reco').item.json.body.uid;\nconst documents = $input.all();\n\n// LangChain wraps metadata inside the doc payload\nconst uids = documents\n  .map(doc => (doc.json.document?.metadata?.uid ?? doc.json.metadata?.uid))\n  .filter(uid => uid && uid !== requestingUid)\n  .slice(0, 5);\n\nreturn [{ json: { uids } }];"
       },
-      "id": "201f9e3f-8792-4697-bf66-dadd8213ce26",
+      "id": "91a59d96-d2cf-4cd0-a386-b6a989ee62dc",
       "name": "Code: Filter Self",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1536,
-        320
+        656,
+        400
       ]
     },
     {
@@ -178,13 +182,13 @@
         "responseBody": "={{ $json.uids }}",
         "options": {}
       },
-      "id": "8a6c8caa-dfe7-4683-9abd-7ce411739e0a",
+      "id": "f67c6f04-dc57-43bf-909c-652fc96bad84",
       "name": "Respond to Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1776,
-        320
+        896,
+        400
       ]
     }
   ],
@@ -194,7 +198,7 @@
       "main": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Qdrant Vector Store",
             "type": "main",
             "index": 0
           }
@@ -205,7 +209,7 @@
       "ai_embedding": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Qdrant Vector Store",
             "type": "ai_embedding",
             "index": 0
           }
@@ -216,7 +220,7 @@
       "ai_document": [
         [
           {
-            "node": "Pinecone Vector Store",
+            "node": "Qdrant Vector Store",
             "type": "ai_document",
             "index": 0
           }
@@ -238,14 +242,14 @@
       "main": [
         [
           {
-            "node": "Pinecone Vector Store1",
+            "node": "Qdrant Vector Store Search",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Pinecone Vector Store1": {
+    "Qdrant Vector Store Search": {
       "main": [
         [
           {
@@ -260,7 +264,7 @@
       "ai_embedding": [
         [
           {
-            "node": "Pinecone Vector Store1",
+            "node": "Qdrant Vector Store Search",
             "type": "ai_embedding",
             "index": 0
           }
@@ -284,7 +288,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "3078dbb0-29e4-4757-b07a-a846fc9570c0",
+  "versionId": "5963f339-65c9-4cc9-8ef1-c99da34edaa2",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "269ed35f1860be28360b77af23e6b2d0530ae2ff28f06c80c4cea5bc0e1becf0"
