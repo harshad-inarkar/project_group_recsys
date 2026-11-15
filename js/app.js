@@ -316,7 +316,7 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-// Fetch AI Recos (FIXED: Handles both Arrays and JSON objects from n8n)
+// Fetch AI Recos (FIXED: Aggressively parses n8n's nested JSON formats)
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
     document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
     const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
@@ -330,14 +330,34 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
         const matches = await res.json();
 
         let uidsArray = [];
-        if (Array.isArray(matches)) {
-            uidsArray = matches; // Standard array
-        } else if (matches && Array.isArray(matches.uids)) {
-            uidsArray = matches.uids; // n8n JSON wrapper object
+
+        // Format 1: n8n array wrapper -> [ { "uids": ["id1", "id2"] } ]
+        if (Array.isArray(matches) && matches.length > 0 && matches[0].uids) {
+            uidsArray = matches[0].uids;
+        }
+        // Format 2: Direct string array -> ["id1", "id2"]
+        else if (Array.isArray(matches) && typeof matches[0] === 'string') {
+            uidsArray = matches;
+        }
+        // Format 3: Standard object wrapper -> { "uids": ["id1", "id2"] }
+        else if (matches && Array.isArray(matches.uids)) {
+            uidsArray = matches.uids;
         }
 
-        fetchAndRenderUsers(uidsArray, "reco-results");
+        // Safety Clean: Ensure Firestore only gets valid string IDs
+        uidsArray = (uidsArray || []).filter(id => typeof id === 'string');
+
+        // Check if there are actual valid IDs before querying Firebase
+        if (uidsArray.length === 0) {
+            document.getElementById("reco-results").innerHTML = "<p class='text-muted'>No active AI matches found at this time.</p>";
+            return;
+        }
+
+        // Pass 'true' so the 'Send Interest' buttons render correctly
+        fetchAndRenderUsers(uidsArray, "reco-results", true);
+
     } catch (e) {
+        console.error("AI Fetch Error:", e);
         showToast("Error connecting to AI", "error");
         document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
     }
