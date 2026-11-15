@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, arrayUnion, collection, query, where, documentId } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove, collection, query, where, documentId } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCmrY4OLmNdTFS_jBQdzAKMMtARAegB5kw",
@@ -65,7 +65,8 @@ document.getElementById("btn-register").addEventListener("click", async () => {
         project_desc: document.getElementById("proj_desc").value,
         status: "open",
         partner_uid: null,
-        interests_received: []
+        interests_received: [],
+        interests_sent: [] // New tracking field
     };
 
     try {
@@ -105,6 +106,11 @@ async function loadUserProfile(uid) {
     const docSnap = await getDoc(doc(db, "users", uid));
     if (docSnap.exists()) {
         currentUserProfile = docSnap.data();
+
+        // Safety initialization for older accounts
+        if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
+        if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
+
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
 
@@ -151,7 +157,6 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     try {
         await updateDoc(doc(db, "users", auth.currentUser.uid), updatedData);
 
-        // Push update to n8n to sync Vector Store
         const combinedText = `Experience: ${updatedData.exp}, City: ${updatedData.city}, Domain: ${updatedData.current_domain}, Project: ${updatedData.project_desc}`;
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST",
@@ -160,7 +165,7 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
         });
 
         showToast("Profile updated successfully!");
-        loadUserProfile(auth.currentUser.uid); // Refresh state
+        loadUserProfile(auth.currentUser.uid);
     } catch (e) {
         showToast("Failed to update profile", "error");
     }
@@ -176,6 +181,23 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isInc
 
     let html = "";
     usersDataArray.forEach((u) => {
+        let actionButtons = '';
+
+        // Build Action Buttons based on status
+        if (isIncomingInterest) {
+            actionButtons = `
+                <button class="btn btn-primary" onclick="acceptInterest('${u.id}')">Accept</button>
+                <button class="btn btn-danger" onclick="rejectInterest('${u.id}')" style="margin-left: 5px;">Reject</button>
+            `;
+        } else if (allowActions) {
+            const sentInterests = currentUserProfile.interests_sent || [];
+            if (sentInterests.includes(u.id)) {
+                actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.6; cursor: not-allowed;">Pending Request...</button>`;
+            } else {
+                actionButtons = `<button class="btn btn-outline" id="btn-send-${u.id}" onclick="sendInterest('${u.id}')">Send Interest</button>`;
+            }
+        }
+
         html += `
         <div class="card user-card">
             <h4>${u.name} <span class="badge">${u.city || 'No City'}</span></h4>
@@ -187,8 +209,7 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isInc
             </div>
             <p style="margin-top:10px;"><strong>Project Idea:</strong><br/> ${u.project_desc || '<span class="text-muted">None provided</span>'}</p>
             <div class="user-card-actions">
-                ${allowActions ? `<button class="btn btn-outline" onclick="sendInterest('${u.id}')">Send Interest</button>` : ''}
-                ${isIncomingInterest ? `<button class="btn btn-primary" onclick="acceptInterest('${u.id}')">Accept & Team Up</button>` : ''}
+                ${actionButtons}
             </div>
         </div>`;
     });
@@ -202,7 +223,6 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
     document.getElementById(containerId).innerHTML = "<p class='text-muted'>Loading profiles...</p>";
     let allUsers = [];
 
-    // Chunk array to bypass Firebase's 10-item limit for 'in' queries
     for (let i = 0; i < uidArray.length; i += 10) {
         const chunk = uidArray.slice(i, i + 10);
         const q = query(collection(db, "users"), where(documentId(), "in", chunk));
@@ -213,7 +233,7 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
     renderUserCards(allUsers, containerId, allowActions, isIncomingInterest);
 }
 
-// Direct Database Fetch for "All Members" (bypasses UID array matching entirely)
+// Direct Database Fetch for "All Members"
 async function loadAllMembers() {
     document.getElementById("all-results").innerHTML = "<p class='text-muted'>Loading open members...</p>";
     const q = query(collection(db, "users"), where("status", "==", "open"));
@@ -229,7 +249,7 @@ async function loadAllMembers() {
     renderUserCards(allUsers, "all-results", true, false);
 }
 
-// Fetch AI Recos
+// Fetch AI Recos (FIXED: Handles both Arrays and JSON objects from n8n)
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
     document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
     const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
@@ -241,7 +261,15 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
             body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: combinedText })
         });
         const matches = await res.json();
-        fetchAndRenderUsers(matches, "reco-results");
+
+        let uidsArray = [];
+        if (Array.isArray(matches)) {
+            uidsArray = matches; // Standard array
+        } else if (matches && Array.isArray(matches.uids)) {
+            uidsArray = matches.uids; // n8n JSON wrapper object
+        }
+
+        fetchAndRenderUsers(uidsArray, "reco-results");
     } catch (e) {
         showToast("Error connecting to AI", "error");
         document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
@@ -250,13 +278,30 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
 
 // Load Interests
 function loadInterests() {
-    fetchAndRenderUsers(currentUserProfile.interests_received, "interests-results", false, true);
+    const received = currentUserProfile.interests_received || [];
+    fetchAndRenderUsers(received, "interests-results", false, true);
 }
 
-// Global actions exposed to window for inline onclicks
+// Window actions for inline onclicks
 window.sendInterest = async (targetUid) => {
     try {
+        // Update the target user's 'received' array
         await updateDoc(doc(db, "users", targetUid), { interests_received: arrayUnion(auth.currentUser.uid) });
+        // Update current user's 'sent' array
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_sent: arrayUnion(targetUid) });
+
+        // Update local state and instantly swap the button UI
+        if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
+        currentUserProfile.interests_sent.push(targetUid);
+
+        const btns = document.querySelectorAll(`#btn-send-${targetUid}`);
+        btns.forEach(btn => {
+            btn.innerText = "Pending Request...";
+            btn.style.opacity = "0.6";
+            btn.style.cursor = "not-allowed";
+            btn.disabled = true;
+        });
+
         showToast("Interest sent to user!");
     } catch (e) { showToast("Failed to send interest", "error"); }
 };
@@ -280,4 +325,19 @@ window.acceptInterest = async (requesterUid) => {
         showToast("Team successfully formed!");
         setTimeout(() => window.location.reload(), 1500);
     } catch (e) { showToast("Failed to form team", "error"); }
+};
+
+window.rejectInterest = async (requesterUid) => {
+    try {
+        // Remove from current user's received
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_received: arrayRemove(requesterUid) });
+        // Remove from requester's sent
+        await updateDoc(doc(db, "users", requesterUid), { interests_sent: arrayRemove(auth.currentUser.uid) });
+
+        // Update local state and UI
+        currentUserProfile.interests_received = currentUserProfile.interests_received.filter(id => id !== requesterUid);
+        loadInterests(); // refresh tab
+
+        showToast("Interest rejected.");
+    } catch (e) { showToast("Failed to reject interest", "error"); }
 };
