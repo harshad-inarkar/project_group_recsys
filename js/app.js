@@ -31,7 +31,7 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// Handle UI State based on login
+// Handle UI State based on login (With robust error handling)
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
@@ -94,50 +94,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     }
 });
 
-// Load Profile Data
-async function loadUserProfile(uid) {
-    try {
-        const docSnap = await getDoc(doc(db, "users", uid));
-
-        if (!docSnap.exists()) {
-            showToast("User profile not found in database. Please register again.", "error");
-            await auth.signOut();
-            return;
-        }
-
-        currentUserProfile = docSnap.data();
-
-        // Safety initialization for arrays
-        if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
-        if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
-
-        document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
-        populateProfileForm(currentUserProfile);
-
-        if (currentUserProfile.status === "teamed_up") {
-            document.getElementById("partner-alert").classList.remove("hidden");
-            document.querySelector(".tab-bar").classList.add("hidden");
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-            await fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false);
-        } else {
-            await loadAllMembers();
-            loadInterests();
-        }
-    } catch (error) {
-        console.error("Error fetching profile:", error);
-
-        // Check if it's a permissions error
-        if (error.code === 'permission-denied') {
-            showToast("Database Access Denied. Check Firebase Rules!", "error");
-        } else {
-            showToast("Failed to load user data.", "error");
-        }
-    }
-}
-
-
-
-// Update the Login Button to show a loading state
+// Login (With visual loading state)
 document.getElementById("btn-login").addEventListener("click", async (e) => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
@@ -158,7 +115,44 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
     }
 });
 
+// Load Profile Data
+async function loadUserProfile(uid) {
+    try {
+        const docSnap = await getDoc(doc(db, "users", uid));
 
+        if (!docSnap.exists()) {
+            showToast("User profile not found in database. Please register again.", "error");
+            await auth.signOut();
+            return;
+        }
+
+        currentUserProfile = docSnap.data();
+
+        // Safety initialization 
+        if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
+        if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
+
+        document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
+        populateProfileForm(currentUserProfile);
+
+        if (currentUserProfile.status === "teamed_up") {
+            document.getElementById("partner-alert").classList.remove("hidden");
+            document.querySelector(".tab-bar").classList.add("hidden");
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            await fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false);
+        } else {
+            await loadAllMembers();
+            loadInterests();
+        }
+    } catch (error) {
+        console.error("Error fetching profile:", error);
+        if (error.code === 'permission-denied') {
+            showToast("Database Access Denied. Check Firebase Rules!", "error");
+        } else {
+            showToast("Failed to load user data.", "error");
+        }
+    }
+}
 
 // Populate the "My Profile" tab form
 function populateProfileForm(data) {
@@ -221,14 +215,14 @@ function renderUserCards(usersDataArray, containerId, allowActions = true) {
             const receivedInterests = currentUserProfile.interests_received || [];
             const sentInterests = currentUserProfile.interests_sent || [];
 
-            // Logic: If they sent you an interest, show Accept/Reject globally on any tab
+            // If they sent you an interest, show Accept/Reject globally
             if (receivedInterests.includes(u.id)) {
                 actionButtons = `
                     <button class="btn btn-primary" onclick="acceptInterest('${u.id}')">Accept</button>
                     <button class="btn btn-danger" onclick="rejectInterest('${u.id}')">Reject</button>
                 `;
             }
-            // Logic: If you sent them an interest, show pending globally
+            // If you sent them an interest, show pending globally
             else if (sentInterests.includes(u.id)) {
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.5; border-color: rgba(255,255,255,0.2); color: #a1a1aa; cursor: not-allowed;">Request Pending</button>`;
             }
