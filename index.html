@@ -297,6 +297,14 @@
             width: auto;
             flex: 1;
         }
+
+        .social-links a {
+            transition: opacity 0.2s;
+        }
+
+        .social-links a:hover {
+            opacity: 0.8;
+        }
     </style>
 </head>
 
@@ -323,8 +331,10 @@
             <h3>Create Profile</h3>
             <div class="form-group"><label for="name">Full Name <span style="color:var(--danger)">*</span></label><input
                     type="text" id="name" required></div>
+
             <div class="form-group"><label for="exp">Experience</label>
                 <select id="exp">
+                    <option value="1+">1+</option>
                     <option value="5+">5+</option>
                     <option value="10+">10+</option>
                     <option value="15+">15+</option>
@@ -339,6 +349,13 @@
                 </select>
             </div>
             <div class="form-group"><label for="domain">Work Domain</label><input type="text" id="domain"></div>
+
+            <!-- Optional Socials -->
+            <div class="form-group"><label for="linkedin">LinkedIn URL (Optional)</label><input type="url" id="linkedin"
+                    placeholder="https://linkedin.com/in/..."></div>
+            <div class="form-group"><label for="contact">WhatsApp Number (Optional)</label><input type="text"
+                    id="contact" placeholder="e.g., 919876543210"></div>
+
             <div class="form-group"><label for="proj_domain">Project Domain</label><input type="text" id="proj_domain">
             </div>
             <div class="form-group"><label for="proj_desc">Project Idea</label><textarea id="proj_desc"
@@ -358,7 +375,8 @@
         <!-- MAIN TABS -->
         <div class="tab-bar main-tabs">
             <button class="tab-btn active" id="nav-search" onclick="showMainTab('tab-search', this)">Search</button>
-            <button class="tab-btn" id="nav-projects" onclick="showMainTab('tab-projects', this)">Projects</button>
+            <button class="tab-btn" id="nav-projects"
+                onclick="showMainTab('tab-projects', this); window.loadAllProjects();">Projects</button>
             <button class="tab-btn" id="nav-profile" onclick="showMainTab('tab-profile', this)">Profile</button>
             <button class="tab-btn hidden" id="nav-admin" onclick="showMainTab('tab-admin', this)"
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
@@ -415,8 +433,6 @@
                 <div>
                     <h3>Project Teams</h3>
                 </div>
-                <button onclick="loadAllProjects()" class="btn btn-outline"
-                    style="width: auto; padding: 4px 10px; font-size: 0.85rem;">Refresh</button>
             </div>
             <div id="projects-results"></div>
         </div>
@@ -453,8 +469,10 @@
                     </select>
                 </div>
                 <div class="form-group"><label>Full Name</label><input type="text" id="edit_name" required></div>
+
                 <div class="form-group"><label>Experience</label>
                     <select id="edit_exp">
+                        <option value="1+">1+</option>
                         <option value="5+">5+</option>
                         <option value="10+">10+</option>
                         <option value="15+">15+</option>
@@ -469,6 +487,12 @@
                     </select>
                 </div>
                 <div class="form-group"><label>Work Domain</label><input type="text" id="edit_domain"></div>
+
+                <div class="form-group"><label>LinkedIn URL (Optional)</label><input type="url" id="edit_linkedin">
+                </div>
+                <div class="form-group"><label>WhatsApp Number (Optional)</label><input type="text" id="edit_contact">
+                </div>
+
                 <div class="form-group"><label>Project Domain</label><input type="text" id="edit_proj_domain"></div>
                 <div class="form-group"><label>Project Idea</label><textarea id="edit_proj_desc" rows="3"></textarea>
                 </div>

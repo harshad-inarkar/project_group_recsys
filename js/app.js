@@ -74,6 +74,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     const userData = {
         name: name, exp: document.getElementById("exp").value, city: document.getElementById("city").value,
         background: document.getElementById("background").value, current_domain: document.getElementById("domain").value,
+        linkedin: document.getElementById("linkedin").value.trim(), contact: document.getElementById("contact").value.trim(),
         project_domain: document.getElementById("proj_domain").value, project_desc: document.getElementById("proj_desc").value,
         status: "open", team_id: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
     };
@@ -132,15 +133,20 @@ async function loadUserProfile(uid) {
         // STRICT UI CONTROL: Solo / Teamed Up members cannot see the Search tab.
         if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
             document.getElementById("nav-search").classList.add("hidden");
-            document.getElementById("nav-projects").click(); // Force default to Projects
+            document.getElementById("nav-projects").click();
         } else {
             document.getElementById("nav-search").classList.remove("hidden");
-            document.getElementById("nav-search").click(); // Force default to Search
+            document.getElementById("nav-search").click();
 
-            // Only load search queries if they actually have access to the tab
             await loadAllMembers();
             loadInterests();
-            fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
+
+            if (currentUserProfile.random_matches.length === 0) {
+                document.getElementById("random-results").innerHTML = "<p class='text-muted'>Wait for admin for random matches.</p>";
+            } else {
+                fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
+            }
+
             fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
         }
 
@@ -150,16 +156,18 @@ async function loadUserProfile(uid) {
 
 function populateProfileForm(data) {
     document.getElementById("edit_name").value = data.name || "";
-    document.getElementById("edit_exp").value = data.exp || "5+";
+    document.getElementById("edit_exp").value = data.exp || "1+";
     document.getElementById("edit_city").value = data.city || "";
     document.getElementById("edit_background").value = data.background || "Tech";
     document.getElementById("edit_domain").value = data.current_domain || "";
+    document.getElementById("edit_linkedin").value = data.linkedin || "";
+    document.getElementById("edit_contact").value = data.contact || "";
     document.getElementById("edit_proj_domain").value = data.project_domain || "";
     document.getElementById("edit_proj_desc").value = data.project_desc || "";
     document.getElementById("edit_status").value = data.status || "open";
 }
 
-// BULLETPROOF LEAVE TEAM (CASCADING EFFECTS)
+// CASCADING LEAVE TEAM 
 async function leaveTeam(userId, teamId) {
     try {
         if (!teamId) return;
@@ -170,18 +178,14 @@ async function leaveTeam(userId, teamId) {
             let pData = projSnap.data();
             let members = pData.members || [];
 
-            // Filter out the leaving user
             let remainingMembers = members.filter(m => m.uid !== userId);
 
             if (remainingMembers.length < 2) {
-                // If less than 2 people left, the team is dead. Delete project.
                 await deleteDoc(projRef);
 
-                // Cascade Effect: Mark all stranded members as 'open'
                 for (let m of remainingMembers) {
                     await updateDoc(doc(db, "users", m.uid), { status: "open", team_id: null });
 
-                    // Force Qdrant vector update so they immediately appear in AI Search again
                     const otherSnap = await getDoc(doc(db, "users", m.uid));
                     if (otherSnap.exists()) {
                         const od = otherSnap.data();
@@ -192,7 +196,6 @@ async function leaveTeam(userId, teamId) {
                     }
                 }
             } else {
-                // Future proofing: If 3+ people were in group, just remove the 1 user
                 await updateDoc(projRef, { members: remainingMembers });
             }
         }
@@ -204,15 +207,15 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
         name: document.getElementById("edit_name").value.trim(), exp: document.getElementById("edit_exp").value,
         city: document.getElementById("edit_city").value, background: document.getElementById("edit_background").value,
         current_domain: document.getElementById("edit_domain").value, project_domain: document.getElementById("edit_proj_domain").value,
+        linkedin: document.getElementById("edit_linkedin").value.trim(), contact: document.getElementById("edit_contact").value.trim(),
         project_desc: document.getElementById("edit_proj_desc").value, status: document.getElementById("edit_status").value
     };
     if (!updatedData.name) return showToast("Name is required", "error");
 
     try {
-        // Trigger leave cascade BEFORE updating the database if switching to open/solo
         if (currentUserProfile.team_id && (updatedData.status === "open" || updatedData.status === "solo")) {
             await leaveTeam(auth.currentUser.uid, currentUserProfile.team_id);
-            updatedData.team_id = null; // Crucial: erase team ID from user doc
+            updatedData.team_id = null;
         }
 
         if (currentUserProfile.status === "solo" && updatedData.status === "open") {
@@ -267,6 +270,17 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
             actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Waiting for reply...</button>`;
         }
 
+        let socialsHtml = "";
+        if (u.linkedin || u.contact) {
+            socialsHtml = `<div class="social-links" style="margin-top: 10px; display: flex; gap: 15px;">`;
+            if (u.linkedin) socialsHtml += `<a href="${u.linkedin}" target="_blank" style="color: #0ea5e9; text-decoration: none; font-size: 0.9rem; font-weight: 500;">🔗 LinkedIn</a>`;
+            if (u.contact) {
+                const waNum = u.contact.replace(/\D/g, ''); // Strip non-numeric chars for WhatsApp link
+                socialsHtml += `<a href="https://wa.me/${waNum}" target="_blank" style="color: #22c55e; text-decoration: none; font-size: 0.9rem; font-weight: 500;">💬 WhatsApp</a>`;
+            }
+            socialsHtml += `</div>`;
+        }
+
         html += `<div class="card user-card">
             <h4>${u.name} <span class="badge">${u.city || 'No City'}</span></h4>
             <div class="user-card-meta">
@@ -278,6 +292,7 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
             <div style="margin-top:10px; background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
                 <strong style="color:var(--primary); font-size:0.875rem;">Project Idea:</strong><br/> 
                 <span style="font-size:0.95rem;">${u.project_desc || '<span class="text-muted">None provided</span>'}</span>
+                ${socialsHtml}
             </div>
             <div class="user-card-actions">${actionButtons}</div>
         </div>`;
@@ -287,6 +302,7 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
 
 async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, isIncoming = false, isSentTab = false) {
     if (!uidArray || uidArray.length === 0) return renderUserCards([], containerId);
+
     document.getElementById(containerId).innerHTML = "<p class='text-muted'>Loading profiles...</p>";
     let allUsers = [];
 
@@ -324,6 +340,11 @@ window.loadAllProjects = async () => {
         const projectId = docSnap.id;
 
         let membersArray = p.members || [];
+        if (membersArray.length === 0 && p.member1_uid) {
+            membersArray = [{ uid: p.member1_uid, name: p.member1_name }];
+            if (p.member2_uid) membersArray.push({ uid: p.member2_uid, name: p.member2_name });
+        }
+
         const isMyProject = auth.currentUser && membersArray.some(m => m.uid === auth.currentUser.uid);
         const memberNamesStr = membersArray.map(m => m.name).join(' & ');
 
@@ -423,11 +444,13 @@ window.sendInterest = async (targetUid) => {
     } catch (e) { showToast("Failed to send interest", "error"); }
 };
 
+// CLEAN ARRAYS ON TEAM UP
 window.acceptInterest = async (requesterUid) => {
     try {
         const requesterSnap = await getDoc(doc(db, "users", requesterUid));
         const requesterName = requesterSnap.exists() ? requesterSnap.data().name : "Unknown Member";
         const requesterProj = requesterSnap.exists() ? requesterSnap.data().project_desc : "";
+
         const teamId = auth.currentUser.uid + "_" + requesterUid;
 
         await setDoc(doc(db, "projects", teamId), {
@@ -439,8 +462,15 @@ window.acceptInterest = async (requesterUid) => {
             project_desc: currentUserProfile.project_desc || requesterProj || "TBD"
         });
 
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { status: "teamed_up", team_id: teamId });
-        await updateDoc(doc(db, "users", requesterUid), { status: "teamed_up", team_id: teamId });
+        // Wipe interests array clean so ghost requests don't linger in DB
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+            status: "teamed_up", team_id: teamId,
+            interests_received: [], interests_sent: []
+        });
+        await updateDoc(doc(db, "users", requesterUid), {
+            status: "teamed_up", team_id: teamId,
+            interests_received: [], interests_sent: []
+        });
 
         fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: "", status: "teamed_up" }) });
         fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: requesterUid, combinedText: "", status: "teamed_up" }) });
