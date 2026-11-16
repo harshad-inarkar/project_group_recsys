@@ -377,7 +377,10 @@
             <button class="tab-btn active" id="nav-profile" onclick="showMainTab('tab-profile', this)">Profile</button>
             <button class="tab-btn" id="nav-projects"
                 onclick="showMainTab('tab-projects', this); window.loadAllProjects();">Projects</button>
-            <button class="tab-btn" id="nav-search" onclick="showMainTab('tab-search', this)">Search</button>
+
+            <button class="tab-btn" id="nav-search"
+                onclick="showMainTab('tab-search', this); document.getElementById('btn-sub-all').click();">Search</button>
+
             <button class="tab-btn hidden" id="nav-admin" onclick="showMainTab('tab-admin', this)"
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
@@ -457,17 +460,22 @@
 
         <div id="tab-search" class="main-tab-content hidden">
             <div class="tab-bar sub-tabs">
-                <button class="sub-btn active" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
+                <!-- Removed 'active' from AI Recos -->
+                <button class="sub-btn" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
                     Recos</button>
                 <button class="sub-btn" onclick="showSubTab('sub-name-search', this)">Name Search</button>
                 <button class="sub-btn" onclick="showSubTab('sub-random', this)">Random</button>
-                <button class="sub-btn" onclick="showSubTab('sub-all', this)">All Open</button>
+
+                <!-- NEW: Added 'active' and ID to All Open -->
+                <button class="sub-btn active" id="btn-sub-all" onclick="showSubTab('sub-all', this)">All Open</button>
+
                 <button class="sub-btn" onclick="showSubTab('sub-received', this)">Received <span id="nav-red-dot"
                         class="red-dot hidden">•</span></button>
                 <button class="sub-btn" onclick="showSubTab('sub-sent', this)">Sent</button>
             </div>
 
-            <div id="sub-recos" class="sub-tab-content">
+            <!-- NEW: Added 'hidden' to sub-recos -->
+            <div id="sub-recos" class="sub-tab-content hidden">
                 <div class="flex-between" style="margin-bottom: 20px;">
                     <div>
                         <h3>Top AI Matches</h3>
@@ -478,6 +486,7 @@
                     <p class="text-muted">Click 'Refresh Matches' to query the AI.</p>
                 </div>
             </div>
+
             <div id="sub-name-search" class="sub-tab-content hidden">
                 <h3>Search by Name</h3>
                 <div class="form-group">
@@ -488,18 +497,23 @@
                     <p class="text-muted">Type at least 2 characters to search active members.</p>
                 </div>
             </div>
+
             <div id="sub-random" class="sub-tab-content hidden">
                 <h3>Random Matches</h3>
                 <div id="random-results"></div>
             </div>
-            <div id="sub-all" class="sub-tab-content hidden">
+
+            <!-- NEW: Removed 'hidden' from sub-all -->
+            <div id="sub-all" class="sub-tab-content">
                 <h3>All Open Members</h3>
                 <div id="all-results"></div>
             </div>
+
             <div id="sub-received" class="sub-tab-content hidden">
                 <h3>Interests Received</h3>
                 <div id="interests-results"></div>
             </div>
+
             <div id="sub-sent" class="sub-tab-content hidden">
                 <h3>Requests Sent</h3>
                 <div id="sent-results"></div>
