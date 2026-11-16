@@ -313,6 +313,59 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     } catch (e) { showToast("Failed to update profile", "error"); }
 });
 
+
+// CHANGE PASSWORD LOGIC
+document.getElementById("btn-change-password").addEventListener("click", async (e) => {
+    const currentPass = document.getElementById("current_password").value;
+    const newPass = document.getElementById("new_password").value;
+    const confirmPass = document.getElementById("confirm_password").value;
+    const btn = e.target;
+
+    if (!currentPass || !newPass || !confirmPass) {
+        return showToast("Please fill out all password fields.", "error");
+    }
+    if (newPass !== confirmPass) {
+        return showToast("New passwords do not match.", "error");
+    }
+
+    btn.innerText = "Updating...";
+    btn.disabled = true;
+
+    try {
+        const hashedCurrent = await hashPassword(currentPass);
+
+        // Fetch fresh user data from DB to verify current password
+        const userRef = doc(db, "users", currentUserProfile.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists() && userSnap.data().password === hashedCurrent) {
+            // Passwords match -> Hash the new one and save it
+            const hashedNew = await hashPassword(newPass);
+            await updateDoc(userRef, { password: hashedNew });
+
+            showToast("Password updated successfully!");
+
+            // Clear out the input fields
+            document.getElementById("current_password").value = "";
+            document.getElementById("new_password").value = "";
+            document.getElementById("confirm_password").value = "";
+
+            // Update local profile state silently
+            currentUserProfile.password = hashedNew;
+        } else {
+            showToast("Incorrect current password.", "error");
+        }
+    } catch (error) {
+        console.error("Password update error:", error);
+        showToast("Failed to update password.", "error");
+    } finally {
+        btn.innerText = "Update Password";
+        btn.disabled = false;
+    }
+});
+
+
+
 function renderUserCards(usersDataArray, containerId, allowActions = true, isSentTab = false) {
     const container = document.getElementById(containerId);
     if (!usersDataArray || usersDataArray.length === 0) {
