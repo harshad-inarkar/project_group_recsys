@@ -17,7 +17,7 @@ const WEBHOOK_EMBED_PROFILE = "https://harshad-dev-rag.app.n8n.cloud/webhook/emb
 const WEBHOOK_GET_RECO = "https://harshad-dev-rag.app.n8n.cloud/webhook/get-recommendations";
 
 let currentUserProfile = null;
-let platformSettings = { maxMembers: 2 };
+let platformSettings = { maxMembers: 2, register_allowed: true };
 let hasLoadedRecos = false;
 
 let cachedOpenMembers = [];
@@ -32,18 +32,13 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// SEMANTIC OPTIMIZATION: Hierarchical Vector Weighting
 function generateEmbeddingText(u) {
     const idea = (u.project_desc && u.project_desc.trim() !== "") ? u.project_desc : 'Open to collaborative ideas';
     const projDomain = (u.project_domain && u.project_domain.trim() !== "") ? u.project_domain : 'General';
     const workDomain = (u.current_domain && u.current_domain.trim() !== "") ? u.current_domain : 'General';
     const bg = (u.background && u.background.trim() !== "") ? u.background : 'General';
-
-    // Fallback variables for users without specific project concepts
     const exp = u.exp || '1+';
     const city = u.city || 'Anywhere';
-
-    // Projects first (High Attention), Location/Exp last (Tie-Breaker)
     return `Primary Project Focus: ${idea}. Target Project Domain: ${projDomain}. Industry Expertise: ${workDomain}. Professional Background: ${bg}. Location: ${city}. Experience Level: ${exp}.`;
 }
 
@@ -69,28 +64,53 @@ async function loadAutocomplete() {
     });
 }
 
+// Fetch global settings and dynamically update UI
 async function loadPlatformSettings() {
     const snap = await getDoc(doc(db, "settings", "config"));
-    if (snap.exists()) platformSettings = snap.data();
-    const adminInput = document.getElementById("admin-max-members");
-    if (adminInput) adminInput.value = platformSettings.maxMembers || 2;
+    if (snap.exists()) {
+        platformSettings = snap.data();
+    }
+
+    // Safety fallback
+    if (platformSettings.register_allowed === undefined) platformSettings.register_allowed = true;
+
+    // Toggle Registration Button UI
+    const regButton = document.getElementById("btn-toggle-register");
+    if (platformSettings.register_allowed) {
+        regButton.classList.remove("hidden");
+    } else {
+        regButton.classList.add("hidden");
+        document.getElementById('register-fields').classList.add('hidden'); // Ensure form stays hidden
+    }
+
+    // Populate Admin fields if admin exists
+    const adminMax = document.getElementById("admin-max-members");
+    const adminReg = document.getElementById("admin-register-allowed");
+    if (adminMax) adminMax.value = platformSettings.maxMembers || 2;
+    if (adminReg) adminReg.checked = platformSettings.register_allowed;
 }
 
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
     const max = parseInt(document.getElementById("admin-max-members").value);
-    await setDoc(doc(db, "settings", "config"), { maxMembers: max }, { merge: true });
+    const isAllowed = document.getElementById("admin-register-allowed").checked;
+
+    await setDoc(doc(db, "settings", "config"), { maxMembers: max, register_allowed: isAllowed }, { merge: true });
+
     platformSettings.maxMembers = max;
+    platformSettings.register_allowed = isAllowed;
+
     showToast("Platform Settings Saved!");
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
+    await loadPlatformSettings(); // Call this immediately to evaluate register_allowed flag
     await loadAutocomplete();
+
     const savedSession = localStorage.getItem("loggedInUser");
     if (savedSession) {
         document.getElementById("auth-section").classList.add("hidden");
         document.getElementById("app-section").classList.remove("hidden");
         document.getElementById("welcome-msg").innerText = "Loading profile data...";
-        await loadPlatformSettings();
         await loadUserProfile(savedSession);
     }
 });
@@ -117,7 +137,7 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
         if (snap.empty) snap = await getDocs(qName);
 
         if (snap.empty) {
-            showToast("User not found. Please click 'New Profile' to register.", "error");
+            showToast("User not found. Please register.", "error");
         } else {
             const userDoc = snap.docs[0];
             const userData = userDoc.data();
@@ -133,6 +153,10 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
 });
 
 document.getElementById("btn-register").addEventListener("click", async () => {
+    if (!platformSettings.register_allowed) {
+        return showToast("New registrations are currently disabled by the Administrator.", "error");
+    }
+
     const identifier = document.getElementById("login_identifier").value.trim();
     const password = document.getElementById("password").value;
 

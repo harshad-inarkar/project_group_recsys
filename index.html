@@ -328,7 +328,7 @@
         </div>
         <div class="flex-between" style="gap: 12px; margin-top: 24px;">
             <button id="btn-login" class="btn btn-primary">Login</button>
-            <button id="btn-toggle-register" class="btn btn-outline">New Profile</button>
+            <button id="btn-toggle-register" class="btn btn-outline hidden">New Profile</button>
         </div>
 
         <div id="register-fields" class="hidden"
@@ -382,7 +382,6 @@
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
-        <!-- PROFILE (Default Tab) -->
         <div id="tab-profile" class="main-tab-content">
             <div class="card">
                 <h3>Update Your Information</h3>
@@ -395,7 +394,6 @@
                     </select>
                 </div>
 
-                <!-- DYNAMIC TEAM SELECTOR (Hidden by Default) -->
                 <div id="manual-team-setup" class="hidden card"
                     style="background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.05); padding: 15px; margin: 15px 0;">
                     <h4 style="color:var(--primary); margin-bottom: 5px;">Build Your Team</h4>
@@ -480,7 +478,6 @@
                     <p class="text-muted">Click 'Refresh Matches' to query the AI.</p>
                 </div>
             </div>
-
             <div id="sub-name-search" class="sub-tab-content hidden">
                 <h3>Search by Name</h3>
                 <div class="form-group">
@@ -491,7 +488,6 @@
                     <p class="text-muted">Type at least 2 characters to search active members.</p>
                 </div>
             </div>
-
             <div id="sub-random" class="sub-tab-content hidden">
                 <h3>Random Matches</h3>
                 <div id="random-results"></div>
@@ -527,10 +523,18 @@
                 <button id="btn-admin-random" class="btn btn-danger">Generate Random Round for All</button>
                 <hr style="border-color: rgba(255,255,255,0.1); margin: 24px 0;">
                 <h4 style="color: var(--primary);">Platform Settings (Firestore: settings/config)</h4>
+
                 <div class="form-group" style="margin-top: 15px; max-width: 200px;">
                     <label>Max Members per Group</label>
                     <input type="number" id="admin-max-members" value="2" min="2">
                 </div>
+
+                <div class="form-group" style="margin-top: 15px; margin-bottom: 25px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="admin-register-allowed" style="width: auto;"> Allow New Registrations
+                    </label>
+                </div>
+
                 <button id="btn-save-settings" class="btn btn-outline" style="width: auto;">Save Settings</button>
             </div>
         </div>
