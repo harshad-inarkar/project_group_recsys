@@ -221,6 +221,9 @@ async function loadUserProfile(uid) {
             }
 
             fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
+
+            // --- NEW: Auto-load AI Recos on first login ---
+            window.fetchAIRecos();
         }
 
         window.loadAllProjects();

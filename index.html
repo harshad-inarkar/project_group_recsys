@@ -388,7 +388,8 @@
         <!-- SEARCH (Nested) -->
         <div id="tab-search" class="main-tab-content">
             <div class="tab-bar sub-tabs">
-                <button class="sub-btn active" onclick="showSubTab('sub-recos', this)">AI Recos</button>
+                <button class="sub-btn active" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
+                    Recos</button>
                 <button class="sub-btn" onclick="showSubTab('sub-random', this)">Random</button>
                 <button class="sub-btn" onclick="showSubTab('sub-all', this)">All Open</button>
                 <button class="sub-btn" onclick="showSubTab('sub-received', this)">
