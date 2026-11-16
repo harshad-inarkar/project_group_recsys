@@ -71,19 +71,16 @@ async function loadPlatformSettings() {
         platformSettings = snap.data();
     }
 
-    // Safety fallback
     if (platformSettings.register_allowed === undefined) platformSettings.register_allowed = true;
 
-    // Toggle Registration Button UI
     const regButton = document.getElementById("btn-toggle-register");
     if (platformSettings.register_allowed) {
         regButton.classList.remove("hidden");
     } else {
         regButton.classList.add("hidden");
-        document.getElementById('register-fields').classList.add('hidden'); // Ensure form stays hidden
+        document.getElementById('register-fields').classList.add('hidden');
     }
 
-    // Populate Admin fields if admin exists
     const adminMax = document.getElementById("admin-max-members");
     const adminReg = document.getElementById("admin-register-allowed");
     if (adminMax) adminMax.value = platformSettings.maxMembers || 2;
@@ -103,7 +100,7 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
 });
 
 document.addEventListener("DOMContentLoaded", async () => {
-    await loadPlatformSettings(); // Call this immediately to evaluate register_allowed flag
+    await loadPlatformSettings();
     await loadAutocomplete();
 
     const savedSession = localStorage.getItem("loggedInUser");
@@ -241,7 +238,9 @@ async function loadUserProfile(uid) {
             } else {
                 fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
             }
-            window.fetchAIRecos();
+
+            // NOTE: fetchAIRecos() is purposefully excluded here to prevent execution on load.
+            // It will trigger dynamically when the user clicks the AI Recos sub-tab in index.html
         }
         window.loadAllProjects();
     } catch (error) { console.error(error); showToast("Failed to load user data.", "error"); }
@@ -437,6 +436,7 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
             }
         }
 
+        // Send a single, definitive webhook payload for the current user
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: generateEmbeddingText(updatedData), status: updatedData.status })
@@ -551,6 +551,10 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
             });
         } catch (error) { console.warn("Skipping chunk:", chunk); }
     }
+
+    // Sort array dynamically to perfectly preserve Qdrant's Highest-to-Lowest Score Order
+    allUsers.sort((a, b) => uidArray.indexOf(a.id) - uidArray.indexOf(b.id));
+
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
@@ -659,6 +663,7 @@ window.fetchAIRecos = async (forceRefresh = false) => {
             return;
         }
 
+        // Qdrant scores determine array order, which is passed into the rendering function
         fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
         hasLoadedRecos = true;
 
