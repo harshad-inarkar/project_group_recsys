@@ -310,7 +310,6 @@
 <body>
     <div id="toast-container"></div>
 
-    <!-- Auth Section (Custom Username System) -->
     <div id="auth-section" class="card auth-box">
         <h2 style="text-align: center; margin-bottom: 24px;">Welcome</h2>
         <div class="form-group">
@@ -331,7 +330,6 @@
         <div id="register-fields" class="hidden"
             style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 24px;">
             <h3 style="color: var(--primary);">Registration Details</h3>
-
             <div class="form-group"><label for="exp">Experience</label>
                 <select id="exp">
                     <option value="1+">1+</option>
@@ -351,13 +349,10 @@
             </div>
             <div class="form-group"><label for="domain">Work Domain</label><input type="text" id="domain"
                     placeholder="e.g. Finance, Healthcare, Retail"></div>
-
-            <!-- Optional Socials -->
             <div class="form-group"><label for="linkedin">LinkedIn URL (Optional)</label><input type="url" id="linkedin"
                     placeholder="https://linkedin.com/in/..."></div>
             <div class="form-group"><label for="contact">WhatsApp Number (Optional)</label><input type="text"
                     id="contact" placeholder="e.g., 919876543210"></div>
-
             <div class="form-group"><label for="proj_domain">Project Domain</label><input type="text" id="proj_domain"
                     placeholder="e.g. LLM Agents, RAG, Vision AI"></div>
             <div class="form-group"><label for="proj_desc">Project Idea</label><textarea id="proj_desc" rows="3"
@@ -367,7 +362,6 @@
         </div>
     </div>
 
-    <!-- Main App Section -->
     <div id="app-section" class="hidden">
         <div class="flex-between" style="margin-bottom: 24px;">
             <h2 id="welcome-msg"></h2>
@@ -375,93 +369,17 @@
                 style="width: auto; font-size: 0.875rem; padding: 6px 12px;">Logout</button>
         </div>
 
-        <!-- MAIN TABS -->
         <div class="tab-bar main-tabs">
-            <button class="tab-btn active" id="nav-search" onclick="showMainTab('tab-search', this)">Search</button>
+            <button class="tab-btn active" id="nav-profile" onclick="showMainTab('tab-profile', this)">Profile</button>
             <button class="tab-btn" id="nav-projects"
                 onclick="showMainTab('tab-projects', this); window.loadAllProjects();">Projects</button>
-            <button class="tab-btn" id="nav-profile" onclick="showMainTab('tab-profile', this)">Profile</button>
+            <button class="tab-btn" id="nav-search" onclick="showMainTab('tab-search', this)">Search</button>
             <button class="tab-btn hidden" id="nav-admin" onclick="showMainTab('tab-admin', this)"
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
-        <!-- SEARCH (Nested) -->
-        <div id="tab-search" class="main-tab-content">
-            <div class="tab-bar sub-tabs">
-                <button class="sub-btn active" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
-                    Recos</button>
-                <button class="sub-btn" onclick="showSubTab('sub-random', this)">Random</button>
-                <button class="sub-btn" onclick="showSubTab('sub-all', this)">All Open</button>
-                <button class="sub-btn" onclick="showSubTab('sub-received', this)">
-                    Received <span id="nav-red-dot" class="red-dot hidden">•</span>
-                </button>
-                <button class="sub-btn" onclick="showSubTab('sub-sent', this)">Sent</button>
-            </div>
-
-            <div id="sub-recos" class="sub-tab-content">
-                <div class="flex-between" style="margin-bottom: 20px;">
-                    <div>
-                        <h3>Top AI Matches</h3>
-                    </div>
-                    <button id="btn-get-reco" class="btn btn-primary" style="width: auto;">Refresh Matches</button>
-                </div>
-                <div id="reco-results">
-                    <p class="text-muted">Click 'Refresh Matches' to query the AI.</p>
-                </div>
-            </div>
-
-            <div id="sub-random" class="sub-tab-content hidden">
-                <h3>Random Matches</h3>
-                <div id="random-results"></div>
-            </div>
-
-            <div id="sub-all" class="sub-tab-content hidden">
-                <h3>All Open Members</h3>
-                <div id="all-results"></div>
-            </div>
-
-            <div id="sub-received" class="sub-tab-content hidden">
-                <h3>Interests Received</h3>
-                <div id="interests-results"></div>
-            </div>
-
-            <div id="sub-sent" class="sub-tab-content hidden">
-                <h3>Requests Sent</h3>
-                <div id="sent-results"></div>
-            </div>
-        </div>
-
-        <!-- PROJECTS -->
-        <div id="tab-projects" class="main-tab-content hidden">
-            <div class="flex-between" style="margin-bottom: 20px;">
-                <div>
-                    <h3>Project Teams</h3>
-                </div>
-            </div>
-            <div id="projects-results"></div>
-        </div>
-
-        <!-- ADMIN -->
-        <div id="tab-admin" class="main-tab-content hidden">
-            <div class="card" style="border-color: var(--danger);">
-                <h3 style="color: var(--danger);">Admin Dashboard</h3>
-                <p class="text-muted" style="margin-bottom: 20px;">Generate a new round of 5 random matches for every
-                    currently "open" member.</p>
-                <button id="btn-admin-random" class="btn btn-danger">Generate Random Round for All</button>
-
-                <hr style="border-color: rgba(255,255,255,0.1); margin: 24px 0;">
-
-                <h4 style="color: var(--primary);">Platform Settings (Firestore: settings/config)</h4>
-                <div class="form-group" style="margin-top: 15px; max-width: 200px;">
-                    <label>Max Members per Group</label>
-                    <input type="number" id="admin-max-members" value="2" min="2">
-                </div>
-                <button id="btn-save-settings" class="btn btn-outline" style="width: auto;">Save Settings</button>
-            </div>
-        </div>
-
-        <!-- PROFILE -->
-        <div id="tab-profile" class="main-tab-content hidden">
+        <!-- PROFILE (Now Default Tab) -->
+        <div id="tab-profile" class="main-tab-content">
             <div class="card">
                 <h3>Update Your Information</h3>
                 <div class="form-group">
@@ -475,7 +393,6 @@
                 <div class="form-group"><label>Username (Read-Only)</label><input type="text" id="edit_username"
                         disabled style="opacity:0.6;"></div>
                 <div class="form-group"><label>Full Name</label><input type="text" id="edit_name" required></div>
-
                 <div class="form-group"><label>Experience</label>
                     <select id="edit_exp">
                         <option value="1+">1+</option>
@@ -495,12 +412,10 @@
                 </div>
                 <div class="form-group"><label>Work Domain</label><input type="text" id="edit_domain"
                         placeholder="e.g. Finance, Healthcare, Retail"></div>
-
                 <div class="form-group"><label>LinkedIn URL (Optional)</label><input type="url" id="edit_linkedin">
                 </div>
                 <div class="form-group"><label>WhatsApp Number (Optional)</label><input type="text" id="edit_contact">
                 </div>
-
                 <div class="form-group"><label>Project Domain</label><input type="text" id="edit_proj_domain"
                         placeholder="e.g. LLM Agents, RAG, Vision AI"></div>
                 <div class="form-group"><label>Project Idea</label><textarea id="edit_proj_desc" rows="3"></textarea>
@@ -508,7 +423,6 @@
                 <button id="btn-update-profile" class="btn btn-primary" style="margin-top: 15px;">Save Profile
                     Changes</button>
 
-                <!-- NEW: Change Password Section -->
                 <hr style="border-color: rgba(255,255,255,0.1); margin: 30px 0 20px;">
                 <h4 style="color: var(--primary);">Change Password</h4>
                 <div class="form-group"><label>Current Password</label><input type="password" id="current_password"
@@ -522,32 +436,94 @@
             </div>
         </div>
 
-        <script type="module" src="js/app.js"></script>
-        <script>
-            function showMainTab(tabId, btnElement) {
-                document.querySelectorAll('.main-tab-content').forEach(el => el.classList.add('hidden'));
-                document.getElementById(tabId).classList.remove('hidden');
+        <div id="tab-search" class="main-tab-content hidden">
+            <div class="tab-bar sub-tabs">
+                <button class="sub-btn active" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
+                    Recos</button>
+                <button class="sub-btn" onclick="showSubTab('sub-random', this)">Random</button>
+                <button class="sub-btn" onclick="showSubTab('sub-all', this)">All Open</button>
+                <button class="sub-btn" onclick="showSubTab('sub-received', this)">Received <span id="nav-red-dot"
+                        class="red-dot hidden">•</span></button>
+                <button class="sub-btn" onclick="showSubTab('sub-sent', this)">Sent</button>
+            </div>
+            <div id="sub-recos" class="sub-tab-content">
+                <div class="flex-between" style="margin-bottom: 20px;">
+                    <div>
+                        <h3>Top AI Matches</h3>
+                    </div>
+                    <button id="btn-get-reco" class="btn btn-primary" style="width: auto;">Refresh Matches</button>
+                </div>
+                <div id="reco-results">
+                    <p class="text-muted">Click 'Refresh Matches' to query the AI.</p>
+                </div>
+            </div>
+            <div id="sub-random" class="sub-tab-content hidden">
+                <h3>Random Matches</h3>
+                <div id="random-results"></div>
+            </div>
+            <div id="sub-all" class="sub-tab-content hidden">
+                <h3>All Open Members</h3>
+                <div id="all-results"></div>
+            </div>
+            <div id="sub-received" class="sub-tab-content hidden">
+                <h3>Interests Received</h3>
+                <div id="interests-results"></div>
+            </div>
+            <div id="sub-sent" class="sub-tab-content hidden">
+                <h3>Requests Sent</h3>
+                <div id="sent-results"></div>
+            </div>
+        </div>
 
-                document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
-                if (btnElement) btnElement.classList.add('active');
+        <div id="tab-projects" class="main-tab-content hidden">
+            <div class="flex-between" style="margin-bottom: 20px;">
+                <div>
+                    <h3>Project Teams</h3>
+                </div>
+            </div>
+            <div id="projects-results"></div>
+        </div>
+
+        <div id="tab-admin" class="main-tab-content hidden">
+            <div class="card" style="border-color: var(--danger);">
+                <h3 style="color: var(--danger);">Admin Dashboard</h3>
+                <p class="text-muted" style="margin-bottom: 20px;">Generate a new round of 5 random matches for every
+                    currently "open" member.</p>
+                <button id="btn-admin-random" class="btn btn-danger">Generate Random Round for All</button>
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 24px 0;">
+                <h4 style="color: var(--primary);">Platform Settings (Firestore: settings/config)</h4>
+                <div class="form-group" style="margin-top: 15px; max-width: 200px;">
+                    <label>Max Members per Group</label>
+                    <input type="number" id="admin-max-members" value="2" min="2">
+                </div>
+                <button id="btn-save-settings" class="btn btn-outline" style="width: auto;">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+    <script>
+        function showMainTab(tabId, btnElement) {
+            document.querySelectorAll('.main-tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.querySelectorAll('.main-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+        }
+
+        function showSubTab(tabId, btnElement) {
+            document.querySelectorAll('.sub-tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            document.querySelectorAll('.sub-tabs .sub-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+            if (tabId === 'sub-received') {
+                document.getElementById('nav-red-dot').classList.add('hidden');
             }
+        }
 
-            function showSubTab(tabId, btnElement) {
-                document.querySelectorAll('.sub-tab-content').forEach(el => el.classList.add('hidden'));
-                document.getElementById(tabId).classList.remove('hidden');
-
-                document.querySelectorAll('.sub-tabs .sub-btn').forEach(btn => btn.classList.remove('active'));
-                if (btnElement) btnElement.classList.add('active');
-
-                if (tabId === 'sub-received') {
-                    document.getElementById('nav-red-dot').classList.add('hidden');
-                }
-            }
-
-            document.getElementById('btn-toggle-register').addEventListener('click', () => {
-                document.getElementById('register-fields').classList.toggle('hidden');
-            });
-        </script>
+        document.getElementById('btn-toggle-register').addEventListener('click', () => {
+            document.getElementById('register-fields').classList.toggle('hidden');
+        });
+    </script>
 </body>
 
 </html>

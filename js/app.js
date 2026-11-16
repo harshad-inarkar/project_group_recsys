@@ -18,6 +18,7 @@ const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get
 
 let currentUserProfile = null;
 let platformSettings = { maxMembers: 2 };
+let hasLoadedRecos = false; // Prevents spamming n8n
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -28,7 +29,7 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// Custom Hashing for Passwords
+// Custom Hashing
 async function hashPassword(password) {
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
@@ -37,12 +38,10 @@ async function hashPassword(password) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Generate Username 
 function cleanName(name) {
     return name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, '_').replace(/^_|_$/g, '');
 }
 
-// Populate Autocomplete list on load
 async function loadAutocomplete() {
     const snap = await getDocs(collection(db, "users"));
     const datalist = document.getElementById("user-list");
@@ -67,10 +66,9 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     showToast("Platform Settings Saved!");
 });
 
-// INITIALIZATION & SESSION CHECK
+// INITIALIZATION
 document.addEventListener("DOMContentLoaded", async () => {
     await loadAutocomplete();
-
     const savedSession = localStorage.getItem("loggedInUser");
     if (savedSession) {
         document.getElementById("auth-section").classList.add("hidden");
@@ -81,25 +79,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 });
 
-// LOGOUT
 window.logoutCustom = () => {
     localStorage.removeItem("loggedInUser");
     window.location.reload();
 };
 
-// CUSTOM LOGIN
 document.getElementById("btn-login").addEventListener("click", async (e) => {
     const identifier = document.getElementById("login_identifier").value.trim();
     const password = document.getElementById("password").value;
     const btn = e.target;
 
     if (!identifier || !password) return showToast("Enter Name/Username and password", "error");
-
     btn.innerText = "Logging in..."; btn.disabled = true;
+
     try {
         const hashedPass = await hashPassword(password);
-
-        // Search by username or full name
         const qUsername = query(collection(db, "users"), where("username", "==", identifier));
         const qName = query(collection(db, "users"), where("name", "==", identifier));
 
@@ -111,10 +105,9 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
         } else {
             const userDoc = snap.docs[0];
             const userData = userDoc.data();
-
             if (userData.password === hashedPass) {
                 localStorage.setItem("loggedInUser", userDoc.id);
-                window.location.reload(); // Reload to trigger session load
+                window.location.reload();
             } else {
                 showToast("Incorrect password", "error");
             }
@@ -123,7 +116,6 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
     finally { btn.innerText = "Login"; btn.disabled = false; }
 });
 
-// CUSTOM REGISTER (INCREMENTAL UID)
 document.getElementById("btn-register").addEventListener("click", async () => {
     const identifier = document.getElementById("login_identifier").value.trim();
     const password = document.getElementById("password").value;
@@ -143,14 +135,10 @@ document.getElementById("btn-register").addEventListener("click", async () => {
 
         let baseUsername = cleanName(identifier);
         let finalUsername = baseUsername;
-
         const usernameCheck = await getDocs(query(collection(db, "users"), where("username", "==", baseUsername)));
-        if (!usernameCheck.empty) {
-            finalUsername = `${baseUsername}_${uidStr}`;
-        }
+        if (!usernameCheck.empty) finalUsername = `${baseUsername}_${uidStr}`;
 
         const hashedPass = await hashPassword(password);
-
         const userData = {
             uid: uidStr, username: finalUsername, name: identifier, password: hashedPass,
             exp: document.getElementById("exp").value, city: document.getElementById("city").value,
@@ -160,26 +148,21 @@ document.getElementById("btn-register").addEventListener("click", async () => {
             status: "open", team_id: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
         };
 
-        // Save new user
         await setDoc(doc(db, "users", uidStr), userData);
-
-        // Update Counter
         await updateDoc(counterRef, { last_uid: newUidNum });
 
-        const combinedText = `Experience: ${userData.exp}, City: ${userData.city}, Domain: ${userData.current_domain}, Project: ${userData.project_desc}`;
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: uidStr, combinedText: combinedText, status: userData.status })
+            body: JSON.stringify({ uid: uidStr, combinedText: `Experience: ${userData.exp}, City: ${userData.city}, Domain: ${userData.current_domain}, Project: ${userData.project_desc}`, status: userData.status })
         });
 
         showToast("Profile created! Logging in...");
         localStorage.setItem("loggedInUser", uidStr);
         setTimeout(() => window.location.reload(), 1000);
-
     } catch (error) { showToast(error.message, "error"); }
 });
 
-// Load Profile & Control UI
+// SAFE PROFILE LOAD SEQUENCE
 async function loadUserProfile(uid) {
     try {
         const docSnap = await getDoc(doc(db, "users", uid));
@@ -197,6 +180,9 @@ async function loadUserProfile(uid) {
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
 
+        // Force UI to always load Profile tab first to prevent missing container errors
+        document.getElementById("nav-profile").click();
+
         const checkAdmin = currentUserProfile.isAdmin === true || String(currentUserProfile.isAdmin).toLowerCase() === "true";
         if (checkAdmin) document.getElementById("nav-admin").classList.remove("hidden");
 
@@ -204,15 +190,16 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         }
 
+        // Setup background data loading based on status
         if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
             document.getElementById("nav-search").classList.add("hidden");
-            document.getElementById("nav-projects").click();
         } else {
             document.getElementById("nav-search").classList.remove("hidden");
-            document.getElementById("nav-search").click();
 
-            await loadAllMembers();
+            // Preload Search Data
+            loadAllMembers();
             loadInterests();
+            fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
 
             if (currentUserProfile.random_matches.length === 0) {
                 document.getElementById("random-results").innerHTML = "<p class='text-muted'>Wait for admin for random matches.</p>";
@@ -220,9 +207,7 @@ async function loadUserProfile(uid) {
                 fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
             }
 
-            fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
-
-            // --- NEW: Auto-load AI Recos on first login ---
+            // Pre-load AI Recos silently
             window.fetchAIRecos();
         }
 
@@ -316,58 +301,37 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     } catch (e) { showToast("Failed to update profile", "error"); }
 });
 
-
-// CHANGE PASSWORD LOGIC
+// PASSWORD LOGIC
 document.getElementById("btn-change-password").addEventListener("click", async (e) => {
     const currentPass = document.getElementById("current_password").value;
     const newPass = document.getElementById("new_password").value;
     const confirmPass = document.getElementById("confirm_password").value;
     const btn = e.target;
 
-    if (!currentPass || !newPass || !confirmPass) {
-        return showToast("Please fill out all password fields.", "error");
-    }
-    if (newPass !== confirmPass) {
-        return showToast("New passwords do not match.", "error");
-    }
+    if (!currentPass || !newPass || !confirmPass) return showToast("Please fill out all password fields.", "error");
+    if (newPass !== confirmPass) return showToast("New passwords do not match.", "error");
 
-    btn.innerText = "Updating...";
-    btn.disabled = true;
+    btn.innerText = "Updating..."; btn.disabled = true;
 
     try {
         const hashedCurrent = await hashPassword(currentPass);
-
-        // Fetch fresh user data from DB to verify current password
         const userRef = doc(db, "users", currentUserProfile.uid);
         const userSnap = await getDoc(userRef);
 
         if (userSnap.exists() && userSnap.data().password === hashedCurrent) {
-            // Passwords match -> Hash the new one and save it
             const hashedNew = await hashPassword(newPass);
             await updateDoc(userRef, { password: hashedNew });
-
             showToast("Password updated successfully!");
-
-            // Clear out the input fields
             document.getElementById("current_password").value = "";
             document.getElementById("new_password").value = "";
             document.getElementById("confirm_password").value = "";
-
-            // Update local profile state silently
             currentUserProfile.password = hashedNew;
         } else {
             showToast("Incorrect current password.", "error");
         }
-    } catch (error) {
-        console.error("Password update error:", error);
-        showToast("Failed to update password.", "error");
-    } finally {
-        btn.innerText = "Update Password";
-        btn.disabled = false;
-    }
+    } catch (error) { showToast("Failed to update password.", "error"); }
+    finally { btn.innerText = "Update Password"; btn.disabled = false; }
 });
-
-
 
 function renderUserCards(usersDataArray, containerId, allowActions = true, isSentTab = false) {
     const container = document.getElementById(containerId);
@@ -511,13 +475,12 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-d// --- NEW: Track if Recos have been loaded ---
-let hasLoadedRecos = false;
-
-// Extract to a globally accessible function
+// AI RECO 
 window.fetchAIRecos = async (forceRefresh = false) => {
-    // If already loaded and the user didn't explicitly click refresh, do nothing.
     if (hasLoadedRecos && !forceRefresh) return;
+
+    // Only attempt fetch if user is open
+    if (!currentUserProfile || currentUserProfile.status !== "open") return;
 
     const recoContainer = document.getElementById("reco-results");
     recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
@@ -551,12 +514,11 @@ window.fetchAIRecos = async (forceRefresh = false) => {
         }
 
         fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
-        hasLoadedRecos = true; // Mark as successfully loaded
+        hasLoadedRecos = true;
 
-    } catch (e) { showToast("Error connecting to AI. Check console.", "error"); }
+    } catch (e) { showToast("Error connecting to AI.", "error"); }
 };
 
-// Bind the manual refresh button (forces an update)
 document.getElementById("btn-get-reco").addEventListener("click", () => {
     window.fetchAIRecos(true);
 });
@@ -596,7 +558,6 @@ window.acceptInterest = async (requesterUid) => {
             project_desc: currentUserProfile.project_desc || requesterProj || "TBD"
         });
 
-        // WIPE ARRAYS ON ACCEPT
         await updateDoc(doc(db, "users", currentUserProfile.uid), {
             status: "teamed_up", team_id: teamId, interests_received: [], interests_sent: []
         });
