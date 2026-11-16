@@ -20,7 +20,6 @@ let currentUserProfile = null;
 let platformSettings = { maxMembers: 2 };
 let hasLoadedRecos = false;
 
-// Global Memory Caches for Instant Search
 let cachedOpenMembers = [];
 let manualTeamSelection = [];
 
@@ -31,6 +30,18 @@ function showToast(message, type = "success") {
     toast.innerText = message;
     container.appendChild(toast);
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
+}
+
+// SEMANTIC OPTIMIZATION: Prioritize Domain and Project Idea for better AI Vector Matching
+function generateEmbeddingText(u) {
+    const idea = u.project_desc || 'Open to ideas';
+    const projDomain = u.project_domain || 'Any';
+    const workDomain = u.current_domain || 'Any';
+    const bg = u.background || 'Any';
+    const exp = u.exp || '1+';
+    const city = u.city || 'Anywhere';
+
+    return `Core Project Idea: ${idea}. Target Project Domain: ${projDomain}. Current Work Domain: ${workDomain}. Professional Background: ${bg}. Experience Level: ${exp}. Location: ${city}.`;
 }
 
 async function hashPassword(password) {
@@ -155,7 +166,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
 
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: uidStr, combinedText: `Experience: ${userData.exp}, City: ${userData.city}, Domain: ${userData.current_domain}, Project: ${userData.project_desc}`, status: userData.status })
+            body: JSON.stringify({ uid: uidStr, combinedText: generateEmbeddingText(userData), status: userData.status })
         });
 
         showToast("Profile created! Logging in...");
@@ -164,7 +175,6 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     } catch (error) { showToast(error.message, "error"); }
 });
 
-// SAFE PROFILE LOAD SEQUENCE
 async function loadUserProfile(uid) {
     try {
         const docSnap = await getDoc(doc(db, "users", uid));
@@ -181,7 +191,6 @@ async function loadUserProfile(uid) {
 
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
-
         document.getElementById("nav-profile").click();
 
         const checkAdmin = currentUserProfile.isAdmin === true || String(currentUserProfile.isAdmin).toLowerCase() === "true";
@@ -196,7 +205,7 @@ async function loadUserProfile(uid) {
         } else {
             document.getElementById("nav-search").classList.remove("hidden");
 
-            await loadAllMembers(); // This also populates cachedOpenMembers
+            await loadAllMembers();
             loadInterests();
             fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
 
@@ -205,10 +214,8 @@ async function loadUserProfile(uid) {
             } else {
                 fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
             }
-
             window.fetchAIRecos();
         }
-
         window.loadAllProjects();
     } catch (error) { console.error(error); showToast("Failed to load user data.", "error"); }
 }
@@ -227,7 +234,6 @@ function populateProfileForm(data) {
     document.getElementById("edit_status").value = data.status || "open";
 }
 
-// --- NEW: Global Name Search (Sub-Tab) ---
 document.getElementById("global-name-search").addEventListener("input", (e) => {
     const val = e.target.value.toLowerCase().trim();
     const container = document.getElementById("name-search-results");
@@ -241,8 +247,6 @@ document.getElementById("global-name-search").addEventListener("input", (e) => {
     renderUserCards(filtered, "name-search-results", true);
 });
 
-
-// --- NEW: Manual Team Formation UI (Profile Tab) ---
 document.getElementById("edit_status").addEventListener("change", (e) => {
     const val = e.target.value;
     const container = document.getElementById("manual-team-setup");
@@ -264,9 +268,8 @@ document.getElementById("profile-team-search").addEventListener("input", (e) => 
         return;
     }
     const filtered = cachedOpenMembers.filter(u =>
-        u.name.toLowerCase().includes(val) &&
-        !manualTeamSelection.some(m => m.uid === u.uid)
-    ).slice(0, 5); // Limit dropdown to 5 results for clean UI
+        u.name.toLowerCase().includes(val) && !manualTeamSelection.some(m => m.uid === u.uid)
+    ).slice(0, 5);
 
     let html = "";
     filtered.forEach(u => {
@@ -308,7 +311,6 @@ function renderManualTeamSelection() {
     container.innerHTML = html;
 }
 
-// CASCADING LEAVE TEAM 
 async function leaveTeam(userId, teamId) {
     try {
         if (!teamId) return;
@@ -329,7 +331,7 @@ async function leaveTeam(userId, teamId) {
                         const od = otherSnap.data();
                         fetch(WEBHOOK_EMBED_PROFILE, {
                             method: "POST", headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ uid: m.uid, combinedText: `Experience: ${od.exp}, City: ${od.city}, Domain: ${od.current_domain}, Project: ${od.project_desc}`, status: "open" })
+                            body: JSON.stringify({ uid: m.uid, combinedText: generateEmbeddingText(od), status: "open" })
                         });
                     }
                 }
@@ -351,7 +353,6 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     if (!updatedData.name) return showToast("Name is required", "error");
 
     try {
-        // --- NEW: Handle Manual Team Creation from Profile Tab ---
         let creatingNewTeamManually = false;
         let newTeamId = null;
 
@@ -366,21 +367,17 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
             updatedData.interests_sent = [];
         }
 
-        // Standard logic: if leaving an existing team
         if (currentUserProfile.team_id && (updatedData.status === "open" || updatedData.status === "solo")) {
             await leaveTeam(currentUserProfile.uid, currentUserProfile.team_id);
             updatedData.team_id = null;
         }
 
-        // Standard logic: if abandoning solo status
         if (currentUserProfile.status === "solo" && updatedData.status === "open") {
             await deleteDoc(doc(db, "projects", currentUserProfile.uid));
         }
 
-        // Execute primary user update
         await updateDoc(doc(db, "users", currentUserProfile.uid), updatedData);
 
-        // Execute Project Creations
         if (updatedData.status === "solo") {
             await setDoc(doc(db, "projects", currentUserProfile.uid), {
                 type: "solo", members: [{ uid: currentUserProfile.uid, name: updatedData.name }],
@@ -394,12 +391,9 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
                 ...manualTeamSelection.map(m => ({ uid: m.uid, name: m.name }))
             ];
             await setDoc(doc(db, "projects", newTeamId), {
-                type: "team",
-                members: newMembers,
-                project_desc: updatedData.project_desc || "TBD"
+                type: "team", members: newMembers, project_desc: updatedData.project_desc || "TBD"
             });
 
-            // Loop and mass-update all selected members into the team
             for (let m of manualTeamSelection) {
                 await updateDoc(doc(db, "users", m.uid), {
                     status: "teamed_up", team_id: newTeamId, interests_received: [], interests_sent: []
@@ -410,16 +404,15 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
                     const od = odSnap.data();
                     fetch(WEBHOOK_EMBED_PROFILE, {
                         method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ uid: m.uid, combinedText: `Experience: ${od.exp}, City: ${od.city}, Domain: ${od.current_domain}, Project: ${od.project_desc}`, status: "teamed_up" })
+                        body: JSON.stringify({ uid: m.uid, combinedText: generateEmbeddingText(od), status: "teamed_up" })
                     });
                 }
             }
         }
 
-        const combinedText = `Experience: ${updatedData.exp}, City: ${updatedData.city}, Domain: ${updatedData.current_domain}, Project: ${updatedData.project_desc}`;
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: combinedText, status: updatedData.status })
+            body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: generateEmbeddingText(updatedData), status: updatedData.status })
         });
 
         showToast("Profile updated successfully!");
@@ -427,7 +420,6 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     } catch (e) { showToast("Failed to update profile", "error"); }
 });
 
-// PASSWORD LOGIC
 document.getElementById("btn-change-password").addEventListener("click", async (e) => {
     const currentPass = document.getElementById("current_password").value;
     const newPass = document.getElementById("new_password").value;
@@ -535,7 +527,6 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
-// Caches all open members globally for instant name searches
 async function loadAllMembers() {
     document.getElementById("all-results").innerHTML = "<p class='text-muted'>Loading open members...</p>";
     const q = query(collection(db, "users"), where("status", "==", "open"));
@@ -546,7 +537,7 @@ async function loadAllMembers() {
             allUsers.push({ id: d.id, uid: d.id, ...d.data() });
         }
     });
-    cachedOpenMembers = allUsers; // Global Cache
+    cachedOpenMembers = allUsers;
     renderUserCards(allUsers, "all-results", true);
 }
 
@@ -607,20 +598,17 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-// AI RECO 
 window.fetchAIRecos = async (forceRefresh = false) => {
     if (hasLoadedRecos && !forceRefresh) return;
-
     if (!currentUserProfile || currentUserProfile.status !== "open") return;
 
     const recoContainer = document.getElementById("reco-results");
     recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
-    const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
 
     try {
         const res = await fetch(WEBHOOK_GET_RECO, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: combinedText })
+            body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: generateEmbeddingText(currentUserProfile) })
         });
         const rawResponse = await res.json();
 
@@ -696,8 +684,8 @@ window.acceptInterest = async (requesterUid) => {
             status: "teamed_up", team_id: teamId, interests_received: [], interests_sent: []
         });
 
-        fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: "", status: "teamed_up" }) });
-        fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: requesterUid, combinedText: "", status: "teamed_up" }) });
+        fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: generateEmbeddingText(currentUserProfile), status: "teamed_up" }) });
+        fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: requesterUid, combinedText: generateEmbeddingText(requesterSnap.data()), status: "teamed_up" }) });
 
         showToast("Team successfully formed! Reloading...");
         setTimeout(() => window.location.reload(), 1500);
