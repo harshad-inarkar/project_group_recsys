@@ -13,8 +13,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const WEBHOOK_EMBED_PROFILE = "https://harshad-agentic-demo.app.n8n.cloud/webhook/embed-profile";
-const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get-recommendations";
+const WEBHOOK_EMBED_PROFILE = "https://harshad-dev-rag.app.n8n.cloud/webhook/embed-profile";
+const WEBHOOK_GET_RECO = "https://harshad-dev-rag.app.n8n.cloud/webhook/get-recommendations";
 
 let currentUserProfile = null;
 let platformSettings = { maxMembers: 2 };

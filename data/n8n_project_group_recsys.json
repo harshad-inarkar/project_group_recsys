@@ -20,6 +20,32 @@
     },
     {
       "parameters": {
+        "method": "PUT",
+        "url": "https://9159f626-0d51-4bb1-ba40-3d1ee2dc59af.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/project-group-index/index?wait=true",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"field_name\":\"metadata.uid\",\"field_schema\":\"keyword\"}",
+        "options": {}
+      },
+      "id": "bd3a86af-d6b9-41bc-a797-91cbd869ddfc",
+      "name": "Ensure UID Index (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        -1056
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "nPoDn3MiZxMDe89q",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://9159f626-0d51-4bb1-ba40-3d1ee2dc59af.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/project-group-index/points/delete",
         "authentication": "predefinedCredentialType",
@@ -34,7 +60,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        1072,
+        1312,
         -1056
       ],
       "credentials": {
@@ -54,7 +80,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1264,
+        1504,
         -1056
       ]
     },
@@ -74,7 +100,7 @@
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
       "position": [
-        1520,
+        1760,
         -1056
       ],
       "credentials": {
@@ -91,7 +117,7 @@
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1520,
+        1760,
         -848
       ],
       "credentials": {
@@ -123,20 +149,21 @@
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1,
       "position": [
-        1776,
+        2016,
         -944
       ]
     },
     {
       "parameters": {
-        "chunkOverlap": 100
+        "chunkOverlap": 100,
+        "options": {}
       },
-      "id": "21a137bf-7ab3-4bd8-b611-eacb0ea9b69d",
-      "name": "Token Splitter",
-      "type": "@n8n/n8n-nodes-langchain.textSplitterTokenSplitter",
+      "id": "322d271e-2cea-41e9-ac40-689f21dd87a7",
+      "name": "Recursive Character Text Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
       "typeVersion": 1,
       "position": [
-        2064,
+        2336,
         -848
       ]
     },
@@ -148,7 +175,7 @@
         "options": {}
       },
       "id": "a228d88d-06de-4901-a08f-cce70d208247",
-      "name": "Webhook: Get Reco1",
+      "name": "Webhook: Get Reco",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
@@ -204,7 +231,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const requestingUid = $('Webhook: Get Reco1').item.json.body.uid;\nconst documents = $input.all();\n\n// LangChain wraps metadata inside the doc payload\nconst uids = documents\n  .map(doc => (doc.json.document?.metadata?.uid ?? doc.json.metadata?.uid))\n  .filter((uid, i, arr) => uid && uid !== requestingUid && arr.indexOf(uid) === i)\n  .slice(0, 5);\n\nreturn [{ json: { uids } }];"
+        "jsCode": "const requestingUid = $('Webhook: Get Reco').item.json.body.uid;\nconst documents = $input.all();\n\n// LangChain wraps metadata inside the doc payload\nconst uids = documents\n  .map(doc => (doc.json.document?.metadata?.uid ?? doc.json.metadata?.uid))\n  .filter((uid, i, arr) => uid && uid !== requestingUid && arr.indexOf(uid) === i)\n  .slice(0, 5);\n\nreturn [{ json: { uids } }];"
       },
       "id": "fcfffd19-4253-411c-9ded-476cb369fa5d",
       "name": "Code: Filter Self",
@@ -234,6 +261,17 @@
   "pinData": {},
   "connections": {
     "Webhook: Embed Profile": {
+      "main": [
+        [
+          {
+            "node": "Ensure UID Index (HTTP)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure UID Index (HTTP)": {
       "main": [
         [
           {
@@ -288,7 +326,7 @@
         ]
       ]
     },
-    "Token Splitter": {
+    "Recursive Character Text Splitter": {
       "ai_textSplitter": [
         [
           {
@@ -299,7 +337,7 @@
         ]
       ]
     },
-    "Webhook: Get Reco1": {
+    "Webhook: Get Reco": {
       "main": [
         [
           {
@@ -349,7 +387,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "e3ff65b4-a7bb-42e2-bb93-94fe34bc66be",
+  "versionId": "98fcd28d-153d-4787-bc7b-703a6ad54d0e",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "269ed35f1860be28360b77af23e6b2d0530ae2ff28f06c80c4cea5bc0e1becf0"
