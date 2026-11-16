@@ -8,81 +8,98 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "webhook-embed",
+      "id": "992698e0-b4db-4cc0-a6e7-c872286e0744",
       "name": "Webhook: Embed Profile",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        0,
-        0
-      ]
+        864,
+        -1056
+      ],
+      "webhookId": "4720aea0-91b4-40bf-a579-f4e8f610d6bc"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://YOUR_QDRANT_URL:6333/collections/project-group-index/points/delete",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "api-key",
-              "value": "YOUR_API_KEY"
-            }
-          ]
-        },
+        "url": "https://9159f626-0d51-4bb1-ba40-3d1ee2dc59af.europe-west3-0.gcp.cloud.qdrant.io:6333/collections/project-group-index/points/delete",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"filter\": {\n    \"must\": [\n      {\n        \"key\": \"metadata.uid\",\n        \"match\": {\n          \"value\": \"{{ $('Webhook: Embed Profile').item.json.body.uid }}\"\n        }\n      }\n    ]\n  }\n}",
         "options": {}
       },
-      "id": "http-delete",
+      "id": "998014b2-b627-4cab-88fd-fad6fac6026f",
       "name": "Delete Old Vector (HTTP)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        200,
-        0
+        1072,
+        -1056
       ],
-      "continueOnFail": true
+      "credentials": {
+        "qdrantApi": {
+          "id": "nPoDn3MiZxMDe89q",
+          "name": "Qdrant account"
+        }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const text = $('Webhook: Embed Profile').item.json.body.combinedText;\nreturn [{ json: { profile_data: text } }];"
       },
-      "id": "format-text",
+      "id": "4d2fb17e-0b16-4568-a981-42ab043bedd6",
       "name": "Format Text for Loader",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        400,
-        0
+        1264,
+        -1056
       ]
     },
     {
       "parameters": {
         "mode": "insert",
-        "collectionName": "project-group-index",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "project-group-index",
+          "mode": "list",
+          "cachedResultName": "project-group-index"
+        },
         "options": {}
       },
-      "id": "qdrant-insert",
+      "id": "aba06fa7-206e-49e1-bac8-fe229651f73f",
       "name": "Qdrant Vector Store",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
       "position": [
-        650,
-        0
-      ]
+        1520,
+        -1056
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "nPoDn3MiZxMDe89q",
+          "name": "Qdrant account"
+        }
+      }
     },
     {
       "parameters": {},
-      "id": "gemini-embed-1",
+      "id": "07bc74a5-d53a-4843-8052-3df7b94b4ad3",
       "name": "Google Gemini Embeddings",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        650,
-        200
-      ]
+        1520,
+        -848
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "UUzxMttUkKXfrMSe",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     },
     {
       "parameters": {
@@ -101,13 +118,26 @@
           }
         }
       },
-      "id": "default-data-loader",
+      "id": "6da51700-61a3-4391-bfdd-9f638b9374c9",
       "name": "Default Data Loader",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1,
       "position": [
-        800,
-        200
+        1776,
+        -944
+      ]
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 100
+      },
+      "id": "21a137bf-7ab3-4bd8-b611-eacb0ea9b69d",
+      "name": "Token Splitter",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterTokenSplitter",
+      "typeVersion": 1,
+      "position": [
+        2064,
+        -848
       ]
     },
     {
@@ -117,56 +147,72 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "webhook-reco",
-      "name": "Webhook: Get Reco",
+      "id": "a228d88d-06de-4901-a08f-cce70d208247",
+      "name": "Webhook: Get Reco1",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        0,
-        400
-      ]
+        832,
+        -608
+      ],
+      "webhookId": "c17956d2-8145-4d32-8b9f-837b9461efd7"
     },
     {
       "parameters": {
-        "mode": "retrieve",
-        "collectionName": "project-group-index",
-        "query": "={{ $json.body.combinedText }}",
-        "topK": 8,
-        "options": {
-          "filter": "={\n  \"must\": [\n    {\n      \"key\": \"metadata.status\",\n      \"match\": {\n        \"value\": \"open\"\n      }\n    }\n  ]\n}"
-        }
+        "mode": "load",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "project-group-index",
+          "mode": "list",
+          "cachedResultName": "project-group-index"
+        },
+        "prompt": "={{ $json.body.combinedText }}",
+        "topK": 6,
+        "options": {}
       },
-      "id": "qdrant-retrieve",
-      "name": "Qdrant Vector Store Search",
+      "id": "adefb272-f405-45bd-96d7-ff3e4c993c09",
+      "name": "Qdrant Vector Store Search1",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
       "position": [
-        250,
-        400
-      ]
+        1136,
+        -608
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "nPoDn3MiZxMDe89q",
+          "name": "Qdrant account"
+        }
+      }
     },
     {
       "parameters": {},
-      "id": "gemini-embed-2",
-      "name": "Google Gemini Embeddings1",
+      "id": "cde64029-343f-4b81-8702-9214e82f3dca",
+      "name": "Google Gemini Embeddings2",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        250,
-        600
-      ]
+        1136,
+        -400
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "UUzxMttUkKXfrMSe",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const requestingUid = $('Webhook: Get Reco').item.json.body.uid;\nconst documents = $input.all();\nconst uids = [];\n\nfor (const doc of documents) {\n  if (doc.json && doc.json.metadata && doc.json.metadata.uid) {\n    const matchUid = doc.json.metadata.uid;\n    if (matchUid !== requestingUid) {\n      uids.push(matchUid);\n    }\n  }\n}\n\nreturn [{ json: { uids: [...new Set(uids)].slice(0, 5) } }];"
+        "jsCode": "const requestingUid = $('Webhook: Get Reco1').item.json.body.uid;\nconst documents = $input.all();\n\n// LangChain wraps metadata inside the doc payload\nconst uids = documents\n  .map(doc => (doc.json.document?.metadata?.uid ?? doc.json.metadata?.uid))\n  .filter((uid, i, arr) => uid && uid !== requestingUid && arr.indexOf(uid) === i)\n  .slice(0, 5);\n\nreturn [{ json: { uids } }];"
       },
-      "id": "code-filter",
-      "name": "Code: Filter & Extract UIDs",
+      "id": "fcfffd19-4253-411c-9ded-476cb369fa5d",
+      "name": "Code: Filter Self",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        550,
-        400
+        1488,
+        -608
       ]
     },
     {
@@ -175,16 +221,17 @@
         "responseBody": "={{ $json.uids }}",
         "options": {}
       },
-      "id": "webhook-respond",
-      "name": "Respond to Webhook",
+      "id": "a56cb5d2-271f-40a3-90dd-72c2e417b35c",
+      "name": "Respond to Webhook1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        800,
-        400
+        1728,
+        -608
       ]
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook: Embed Profile": {
       "main": [
@@ -241,49 +288,73 @@
         ]
       ]
     },
-    "Webhook: Get Reco": {
+    "Token Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Get Reco1": {
       "main": [
         [
           {
-            "node": "Qdrant Vector Store Search",
+            "node": "Qdrant Vector Store Search1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Qdrant Vector Store Search": {
+    "Qdrant Vector Store Search1": {
       "main": [
         [
           {
-            "node": "Code: Filter & Extract UIDs",
+            "node": "Code: Filter Self",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Google Gemini Embeddings1": {
+    "Google Gemini Embeddings2": {
       "ai_embedding": [
         [
           {
-            "node": "Qdrant Vector Store Search",
+            "node": "Qdrant Vector Store Search1",
             "type": "ai_embedding",
             "index": 0
           }
         ]
       ]
     },
-    "Code: Filter & Extract UIDs": {
+    "Code: Filter Self": {
       "main": [
         [
           {
-            "node": "Respond to Webhook",
+            "node": "Respond to Webhook1",
             "type": "main",
             "index": 0
           }
         ]
       ]
     }
-  }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e3ff65b4-a7bb-42e2-bb93-94fe34bc66be",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "269ed35f1860be28360b77af23e6b2d0530ae2ff28f06c80c4cea5bc0e1becf0"
+  },
+  "nodeGroups": [],
+  "id": "agcNXfkk3dYE83Yj",
+  "tags": []
 }

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Teaming Platform</title>
+    <title>Project Group RecSys</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -304,6 +304,10 @@
         .social-links a:hover {
             opacity: 0.8;
         }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 
@@ -311,7 +315,7 @@
     <div id="toast-container"></div>
 
     <div id="auth-section" class="card auth-box">
-        <h2 style="text-align: center; margin-bottom: 24px;">Welcome</h2>
+        <h2 style="text-align: center; margin-bottom: 24px;">Project Group RecSys</h2>
         <div class="form-group">
             <label for="login_identifier">Name or Username <span style="color:var(--danger)">*</span></label>
             <input type="text" id="login_identifier" list="user-list" placeholder="Search your name..."
@@ -378,7 +382,7 @@
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
-        <!-- PROFILE (Now Default Tab) -->
+        <!-- PROFILE (Default Tab) -->
         <div id="tab-profile" class="main-tab-content">
             <div class="card">
                 <h3>Update Your Information</h3>
@@ -390,6 +394,23 @@
                         <option value="teamed_up">Teamed Up</option>
                     </select>
                 </div>
+
+                <!-- DYNAMIC TEAM SELECTOR (Hidden by Default) -->
+                <div id="manual-team-setup" class="hidden card"
+                    style="background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.05); padding: 15px; margin: 15px 0;">
+                    <h4 style="color:var(--primary); margin-bottom: 5px;">Build Your Team</h4>
+                    <p class="text-muted" style="margin-bottom:10px;">Select at least 1 open member to form a team (Max
+                        Total Capacity: <span id="lbl-max-members">2</span>).</p>
+                    <div class="form-group" style="position: relative;">
+                        <input type="text" id="profile-team-search" placeholder="Search open members by name..."
+                            autocomplete="off">
+                        <div id="profile-team-dropdown"
+                            style="position: absolute; top: 100%; left: 0; right: 0; background: #18181b; border: 1px solid var(--border); border-radius: 6px; z-index: 10; max-height: 150px; overflow-y: auto;">
+                        </div>
+                    </div>
+                    <div id="profile-selected-members" style="display:flex; flex-direction:column; gap:8px;"></div>
+                </div>
+
                 <div class="form-group"><label>Username (Read-Only)</label><input type="text" id="edit_username"
                         disabled style="opacity:0.6;"></div>
                 <div class="form-group"><label>Full Name</label><input type="text" id="edit_name" required></div>
@@ -440,12 +461,14 @@
             <div class="tab-bar sub-tabs">
                 <button class="sub-btn active" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
                     Recos</button>
+                <button class="sub-btn" onclick="showSubTab('sub-name-search', this)">Name Search</button>
                 <button class="sub-btn" onclick="showSubTab('sub-random', this)">Random</button>
                 <button class="sub-btn" onclick="showSubTab('sub-all', this)">All Open</button>
                 <button class="sub-btn" onclick="showSubTab('sub-received', this)">Received <span id="nav-red-dot"
                         class="red-dot hidden">•</span></button>
                 <button class="sub-btn" onclick="showSubTab('sub-sent', this)">Sent</button>
             </div>
+
             <div id="sub-recos" class="sub-tab-content">
                 <div class="flex-between" style="margin-bottom: 20px;">
                     <div>
@@ -457,6 +480,18 @@
                     <p class="text-muted">Click 'Refresh Matches' to query the AI.</p>
                 </div>
             </div>
+
+            <div id="sub-name-search" class="sub-tab-content hidden">
+                <h3>Search by Name</h3>
+                <div class="form-group">
+                    <input type="text" id="global-name-search" placeholder="Type a name or username to search..."
+                        autocomplete="off">
+                </div>
+                <div id="name-search-results">
+                    <p class="text-muted">Type at least 2 characters to search active members.</p>
+                </div>
+            </div>
+
             <div id="sub-random" class="sub-tab-content hidden">
                 <h3>Random Matches</h3>
                 <div id="random-results"></div>

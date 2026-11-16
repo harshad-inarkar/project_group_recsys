@@ -18,7 +18,11 @@ const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get
 
 let currentUserProfile = null;
 let platformSettings = { maxMembers: 2 };
-let hasLoadedRecos = false; // Prevents spamming n8n
+let hasLoadedRecos = false;
+
+// Global Memory Caches for Instant Search
+let cachedOpenMembers = [];
+let manualTeamSelection = [];
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -29,7 +33,6 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// Custom Hashing
 async function hashPassword(password) {
     const encoder = new TextEncoder();
     const data = encoder.encode(password);
@@ -66,7 +69,6 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     showToast("Platform Settings Saved!");
 });
 
-// INITIALIZATION
 document.addEventListener("DOMContentLoaded", async () => {
     await loadAutocomplete();
     const savedSession = localStorage.getItem("loggedInUser");
@@ -180,7 +182,6 @@ async function loadUserProfile(uid) {
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
 
-        // Force UI to always load Profile tab first to prevent missing container errors
         document.getElementById("nav-profile").click();
 
         const checkAdmin = currentUserProfile.isAdmin === true || String(currentUserProfile.isAdmin).toLowerCase() === "true";
@@ -190,14 +191,12 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         }
 
-        // Setup background data loading based on status
         if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
             document.getElementById("nav-search").classList.add("hidden");
         } else {
             document.getElementById("nav-search").classList.remove("hidden");
 
-            // Preload Search Data
-            loadAllMembers();
+            await loadAllMembers(); // This also populates cachedOpenMembers
             loadInterests();
             fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
 
@@ -207,7 +206,6 @@ async function loadUserProfile(uid) {
                 fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
             }
 
-            // Pre-load AI Recos silently
             window.fetchAIRecos();
         }
 
@@ -227,6 +225,87 @@ function populateProfileForm(data) {
     document.getElementById("edit_proj_domain").value = data.project_domain || "";
     document.getElementById("edit_proj_desc").value = data.project_desc || "";
     document.getElementById("edit_status").value = data.status || "open";
+}
+
+// --- NEW: Global Name Search (Sub-Tab) ---
+document.getElementById("global-name-search").addEventListener("input", (e) => {
+    const val = e.target.value.toLowerCase().trim();
+    const container = document.getElementById("name-search-results");
+    if (val.length < 2) {
+        container.innerHTML = "<p class='text-muted'>Type at least 2 characters to search active members.</p>";
+        return;
+    }
+    const filtered = cachedOpenMembers.filter(u =>
+        u.name.toLowerCase().includes(val) || (u.username && u.username.toLowerCase().includes(val))
+    );
+    renderUserCards(filtered, "name-search-results", true);
+});
+
+
+// --- NEW: Manual Team Formation UI (Profile Tab) ---
+document.getElementById("edit_status").addEventListener("change", (e) => {
+    const val = e.target.value;
+    const container = document.getElementById("manual-team-setup");
+    if (val === "teamed_up" && currentUserProfile.status !== "teamed_up") {
+        container.classList.remove("hidden");
+        document.getElementById("lbl-max-members").innerText = platformSettings.maxMembers;
+        manualTeamSelection = [];
+        renderManualTeamSelection();
+    } else {
+        container.classList.add("hidden");
+    }
+});
+
+document.getElementById("profile-team-search").addEventListener("input", (e) => {
+    const val = e.target.value.toLowerCase().trim();
+    const dropdown = document.getElementById("profile-team-dropdown");
+    if (val.length < 2) {
+        dropdown.innerHTML = "";
+        return;
+    }
+    const filtered = cachedOpenMembers.filter(u =>
+        u.name.toLowerCase().includes(val) &&
+        !manualTeamSelection.some(m => m.uid === u.uid)
+    ).slice(0, 5); // Limit dropdown to 5 results for clean UI
+
+    let html = "";
+    filtered.forEach(u => {
+        html += `<div style="padding:10px; border-bottom:1px solid rgba(255,255,255,0.05); cursor:pointer;" class="dropdown-item" onclick="addManualTeamMember('${u.uid}')">
+            <strong>${u.name}</strong> <span class="text-muted" style="font-size:0.8rem;">(${u.exp}, ${u.city || 'No City'})</span>
+        </div>`;
+    });
+    if (html === "") html = "<div style='padding:10px;' class='text-muted'>No members found.</div>";
+    dropdown.innerHTML = html;
+});
+
+window.addManualTeamMember = (uid) => {
+    if (manualTeamSelection.length >= platformSettings.maxMembers - 1) {
+        return showToast(`Max team size is ${platformSettings.maxMembers} (You + ${platformSettings.maxMembers - 1} members).`, "error");
+    }
+    const user = cachedOpenMembers.find(u => u.uid === uid);
+    if (user) {
+        manualTeamSelection.push(user);
+        document.getElementById("profile-team-search").value = "";
+        document.getElementById("profile-team-dropdown").innerHTML = "";
+        renderManualTeamSelection();
+    }
+};
+
+window.removeManualTeamMember = (uid) => {
+    manualTeamSelection = manualTeamSelection.filter(u => u.uid !== uid);
+    renderManualTeamSelection();
+};
+
+function renderManualTeamSelection() {
+    const container = document.getElementById("profile-selected-members");
+    let html = "";
+    manualTeamSelection.forEach(u => {
+        html += `<div class="flex-between" style="background: rgba(20, 184, 166, 0.1); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(20, 184, 166, 0.3);">
+            <span>${u.name}</span>
+            <button class="btn btn-danger" style="width:auto; padding:4px 8px; font-size:0.75rem;" onclick="removeManualTeamMember('${u.uid}')">Remove</button>
+        </div>`;
+    });
+    container.innerHTML = html;
 }
 
 // CASCADING LEAVE TEAM 
@@ -272,22 +351,69 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     if (!updatedData.name) return showToast("Name is required", "error");
 
     try {
+        // --- NEW: Handle Manual Team Creation from Profile Tab ---
+        let creatingNewTeamManually = false;
+        let newTeamId = null;
+
+        if (updatedData.status === "teamed_up" && currentUserProfile.status !== "teamed_up") {
+            if (manualTeamSelection.length < 1) {
+                return showToast(`You must select at least 1 team member!`, "error");
+            }
+            creatingNewTeamManually = true;
+            newTeamId = currentUserProfile.uid + "_" + Date.now();
+            updatedData.team_id = newTeamId;
+            updatedData.interests_received = [];
+            updatedData.interests_sent = [];
+        }
+
+        // Standard logic: if leaving an existing team
         if (currentUserProfile.team_id && (updatedData.status === "open" || updatedData.status === "solo")) {
             await leaveTeam(currentUserProfile.uid, currentUserProfile.team_id);
             updatedData.team_id = null;
         }
 
+        // Standard logic: if abandoning solo status
         if (currentUserProfile.status === "solo" && updatedData.status === "open") {
             await deleteDoc(doc(db, "projects", currentUserProfile.uid));
         }
 
+        // Execute primary user update
         await updateDoc(doc(db, "users", currentUserProfile.uid), updatedData);
 
+        // Execute Project Creations
         if (updatedData.status === "solo") {
             await setDoc(doc(db, "projects", currentUserProfile.uid), {
                 type: "solo", members: [{ uid: currentUserProfile.uid, name: updatedData.name }],
                 project_desc: updatedData.project_desc || "Working Solo"
             });
+        }
+
+        if (creatingNewTeamManually) {
+            const newMembers = [
+                { uid: currentUserProfile.uid, name: updatedData.name },
+                ...manualTeamSelection.map(m => ({ uid: m.uid, name: m.name }))
+            ];
+            await setDoc(doc(db, "projects", newTeamId), {
+                type: "team",
+                members: newMembers,
+                project_desc: updatedData.project_desc || "TBD"
+            });
+
+            // Loop and mass-update all selected members into the team
+            for (let m of manualTeamSelection) {
+                await updateDoc(doc(db, "users", m.uid), {
+                    status: "teamed_up", team_id: newTeamId, interests_received: [], interests_sent: []
+                });
+
+                const odSnap = await getDoc(doc(db, "users", m.uid));
+                if (odSnap.exists()) {
+                    const od = odSnap.data();
+                    fetch(WEBHOOK_EMBED_PROFILE, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ uid: m.uid, combinedText: `Experience: ${od.exp}, City: ${od.city}, Domain: ${od.current_domain}, Project: ${od.project_desc}`, status: "teamed_up" })
+                    });
+                }
+            }
         }
 
         const combinedText = `Experience: ${updatedData.exp}, City: ${updatedData.city}, Domain: ${updatedData.current_domain}, Project: ${updatedData.project_desc}`;
@@ -409,12 +535,18 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
+// Caches all open members globally for instant name searches
 async function loadAllMembers() {
     document.getElementById("all-results").innerHTML = "<p class='text-muted'>Loading open members...</p>";
     const q = query(collection(db, "users"), where("status", "==", "open"));
     const querySnapshot = await getDocs(q);
     let allUsers = [];
-    querySnapshot.forEach(d => { if (d.id !== currentUserProfile.uid) allUsers.push({ id: d.id, ...d.data() }); });
+    querySnapshot.forEach(d => {
+        if (d.id !== currentUserProfile.uid) {
+            allUsers.push({ id: d.id, uid: d.id, ...d.data() });
+        }
+    });
+    cachedOpenMembers = allUsers; // Global Cache
     renderUserCards(allUsers, "all-results", true);
 }
 
@@ -479,7 +611,6 @@ window.saveProjectIdea = async (projectId) => {
 window.fetchAIRecos = async (forceRefresh = false) => {
     if (hasLoadedRecos && !forceRefresh) return;
 
-    // Only attempt fetch if user is open
     if (!currentUserProfile || currentUserProfile.status !== "open") return;
 
     const recoContainer = document.getElementById("reco-results");
