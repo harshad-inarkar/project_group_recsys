@@ -20,7 +20,7 @@ const WEBHOOK_EMBED_PROFILE = "https://harshad-agentic-demo.app.n8n.cloud/webhoo
 const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get-recommendations";
 
 let currentUserProfile = null;
-let platformSettings = { maxMembers: 2 }; // Default setting
+let platformSettings = { maxMembers: 2 };
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -31,17 +31,14 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// Load Global Admin Settings
+// Global Platform Settings 
 async function loadPlatformSettings() {
     const snap = await getDoc(doc(db, "settings", "config"));
-    if (snap.exists()) {
-        platformSettings = snap.data();
-    }
+    if (snap.exists()) platformSettings = snap.data();
     const adminInput = document.getElementById("admin-max-members");
     if (adminInput) adminInput.value = platformSettings.maxMembers || 2;
 }
 
-// Admin: Save Global Settings
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
     const max = parseInt(document.getElementById("admin-max-members").value);
     await setDoc(doc(db, "settings", "config"), { maxMembers: max }, { merge: true });
@@ -67,7 +64,6 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// Registration
 document.getElementById("btn-register").addEventListener("click", async () => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
@@ -96,7 +92,6 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     } catch (error) { showToast(error.message, "error"); }
 });
 
-// Login
 document.getElementById("btn-login").addEventListener("click", async (e) => {
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
@@ -109,7 +104,7 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
     finally { btn.innerText = "Login"; btn.disabled = false; }
 });
 
-// Load Profile Data
+// Load Profile & Control UI Visibility
 async function loadUserProfile(uid) {
     try {
         const docSnap = await getDoc(doc(db, "users", uid));
@@ -119,7 +114,6 @@ async function loadUserProfile(uid) {
         }
 
         currentUserProfile = docSnap.data();
-
         if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
         if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
         if (!currentUserProfile.interests_rejected) currentUserProfile.interests_rejected = [];
@@ -129,25 +123,28 @@ async function loadUserProfile(uid) {
         populateProfileForm(currentUserProfile);
 
         const checkAdmin = currentUserProfile.isAdmin === true || String(currentUserProfile.isAdmin).toLowerCase() === "true";
-        if (checkAdmin) {
-            document.getElementById("tab-btn-admin").classList.remove("hidden");
-        } else {
-            document.getElementById("tab-btn-admin").classList.add("hidden");
-        }
+        if (checkAdmin) document.getElementById("nav-admin").classList.remove("hidden");
 
         if (currentUserProfile.interests_received.length > 0) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
-        } else {
-            document.getElementById("nav-red-dot").classList.add("hidden");
         }
 
-        // Removed UI Locking for Teamed Up / Solo members. Just load all tabs cleanly.
-        await loadAllMembers();
-        loadInterests();
-        fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
-        fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
-        window.loadAllProjects();
+        // STRICT UI CONTROL: Solo / Teamed Up members cannot see the Search tab.
+        if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
+            document.getElementById("nav-search").classList.add("hidden");
+            document.getElementById("nav-projects").click(); // Force default to Projects
+        } else {
+            document.getElementById("nav-search").classList.remove("hidden");
+            document.getElementById("nav-search").click(); // Force default to Search
 
+            // Only load search queries if they actually have access to the tab
+            await loadAllMembers();
+            loadInterests();
+            fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
+            fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
+        }
+
+        window.loadAllProjects();
     } catch (error) { console.error(error); showToast("Failed to load user data.", "error"); }
 }
 
@@ -162,46 +159,46 @@ function populateProfileForm(data) {
     document.getElementById("edit_status").value = data.status || "open";
 }
 
-// Handle Leaving a Team
+// BULLETPROOF LEAVE TEAM (CASCADING EFFECTS)
 async function leaveTeam(userId, teamId) {
-    const projSnap = await getDoc(doc(db, "projects", teamId));
-    if (projSnap.exists()) {
-        let projData = projSnap.data();
-        let members = projData.members || [];
+    try {
+        if (!teamId) return;
+        const projRef = doc(db, "projects", teamId);
+        const projSnap = await getDoc(projRef);
 
-        // Backwards compatibility if using old member1/member2 schema
-        if (members.length === 0 && projData.member1_uid) {
-            members = [{ uid: projData.member1_uid, name: projData.member1_name }, { uid: projData.member2_uid, name: projData.member2_name }];
-        }
+        if (projSnap.exists()) {
+            let pData = projSnap.data();
+            let members = pData.members || [];
 
-        members = members.filter(m => m.uid !== userId);
+            // Filter out the leaving user
+            let remainingMembers = members.filter(m => m.uid !== userId);
 
-        if (members.length < 2) {
-            // Delete project entirely
-            await deleteDoc(doc(db, "projects", teamId));
+            if (remainingMembers.length < 2) {
+                // If less than 2 people left, the team is dead. Delete project.
+                await deleteDoc(projRef);
 
-            // Release remaining members back to open
-            for (let m of members) {
-                await updateDoc(doc(db, "users", m.uid), { status: "open", team_id: null });
+                // Cascade Effect: Mark all stranded members as 'open'
+                for (let m of remainingMembers) {
+                    await updateDoc(doc(db, "users", m.uid), { status: "open", team_id: null });
 
-                // Force Update Vector DB for the other remaining member
-                const otherSnap = await getDoc(doc(db, "users", m.uid));
-                if (otherSnap.exists()) {
-                    const od = otherSnap.data();
-                    fetch(WEBHOOK_EMBED_PROFILE, {
-                        method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ uid: m.uid, combinedText: `Experience: ${od.exp}, City: ${od.city}, Domain: ${od.current_domain}, Project: ${od.project_desc}`, status: "open" })
-                    });
+                    // Force Qdrant vector update so they immediately appear in AI Search again
+                    const otherSnap = await getDoc(doc(db, "users", m.uid));
+                    if (otherSnap.exists()) {
+                        const od = otherSnap.data();
+                        fetch(WEBHOOK_EMBED_PROFILE, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ uid: m.uid, combinedText: `Experience: ${od.exp}, City: ${od.city}, Domain: ${od.current_domain}, Project: ${od.project_desc}`, status: "open" })
+                        });
+                    }
                 }
+            } else {
+                // Future proofing: If 3+ people were in group, just remove the 1 user
+                await updateDoc(projRef, { members: remainingMembers });
             }
-        } else {
-            // Future proof: If team still has >= 2 members, just update the array
-            await updateDoc(doc(db, "projects", teamId), { members: members });
         }
-    }
+    } catch (e) { console.error("Error in leaveTeam cascade:", e); }
 }
 
-// Update Profile
 document.getElementById("btn-update-profile").addEventListener("click", async () => {
     const updatedData = {
         name: document.getElementById("edit_name").value.trim(), exp: document.getElementById("edit_exp").value,
@@ -212,20 +209,18 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     if (!updatedData.name) return showToast("Name is required", "error");
 
     try {
-        // Handle leaving a team if changing to Open or Solo
+        // Trigger leave cascade BEFORE updating the database if switching to open/solo
         if (currentUserProfile.team_id && (updatedData.status === "open" || updatedData.status === "solo")) {
             await leaveTeam(auth.currentUser.uid, currentUserProfile.team_id);
-            updatedData.team_id = null;
+            updatedData.team_id = null; // Crucial: erase team ID from user doc
         }
 
-        // Handle destroying a Solo project if switching back to Open
         if (currentUserProfile.status === "solo" && updatedData.status === "open") {
             await deleteDoc(doc(db, "projects", auth.currentUser.uid));
         }
 
         await updateDoc(doc(db, "users", auth.currentUser.uid), updatedData);
 
-        // Create Solo Project
         if (updatedData.status === "solo") {
             await setDoc(doc(db, "projects", auth.currentUser.uid), {
                 type: "solo", members: [{ uid: auth.currentUser.uid, name: updatedData.name }],
@@ -244,7 +239,6 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     } catch (e) { showToast("Failed to update profile", "error"); }
 });
 
-// Master Render function
 function renderUserCards(usersDataArray, containerId, allowActions = true, isSentTab = false) {
     const container = document.getElementById(containerId);
     if (!usersDataArray || usersDataArray.length === 0) {
@@ -293,7 +287,6 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
 
 async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, isIncoming = false, isSentTab = false) {
     if (!uidArray || uidArray.length === 0) return renderUserCards([], containerId);
-
     document.getElementById(containerId).innerHTML = "<p class='text-muted'>Loading profiles...</p>";
     let allUsers = [];
 
@@ -306,9 +299,7 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
                 const data = docSnap.data();
                 if (data.status === "open") allUsers.push({ id: docSnap.id, ...data });
             });
-        } catch (error) {
-            console.warn("Skipping invalid or deleted UIDs in chunk:", chunk);
-        }
+        } catch (error) { console.warn("Skipping chunk:", chunk); }
     }
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
@@ -322,7 +313,6 @@ async function loadAllMembers() {
     renderUserCards(allUsers, "all-results", true);
 }
 
-// Editable Projects using Future-Proof Members Array
 window.loadAllProjects = async () => {
     const container = document.getElementById("projects-results");
     container.innerHTML = "<p class='text-muted'>Loading projects...</p>";
@@ -333,13 +323,7 @@ window.loadAllProjects = async () => {
         const p = docSnap.data();
         const projectId = docSnap.id;
 
-        // Parse Members safely
         let membersArray = p.members || [];
-        if (membersArray.length === 0 && p.member1_uid) {
-            membersArray = [{ uid: p.member1_uid, name: p.member1_name }];
-            if (p.member2_uid) membersArray.push({ uid: p.member2_uid, name: p.member2_name });
-        }
-
         const isMyProject = auth.currentUser && membersArray.some(m => m.uid === auth.currentUser.uid);
         const memberNamesStr = membersArray.map(m => m.name).join(' & ');
 
@@ -386,8 +370,6 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-
-// Fetch AI Recos 
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
     const recoContainer = document.getElementById("reco-results");
     recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
@@ -420,10 +402,7 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
         }
         fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
 
-    } catch (e) {
-        showToast("Error connecting to AI. Check console.", "error");
-        recoContainer.innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
-    }
+    } catch (e) { showToast("Error connecting to AI. Check console.", "error"); }
 });
 
 function loadInterests() {
@@ -444,13 +423,11 @@ window.sendInterest = async (targetUid) => {
     } catch (e) { showToast("Failed to send interest", "error"); }
 };
 
-// Form Team with Array Support
 window.acceptInterest = async (requesterUid) => {
     try {
         const requesterSnap = await getDoc(doc(db, "users", requesterUid));
         const requesterName = requesterSnap.exists() ? requesterSnap.data().name : "Unknown Member";
         const requesterProj = requesterSnap.exists() ? requesterSnap.data().project_desc : "";
-
         const teamId = auth.currentUser.uid + "_" + requesterUid;
 
         await setDoc(doc(db, "projects", teamId), {
