@@ -1,5 +1,4 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, query, where, documentId } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -12,9 +11,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getFirestore(app);
-window.auth = auth;
 
 const WEBHOOK_EMBED_PROFILE = "https://harshad-agentic-demo.app.n8n.cloud/webhook/embed-profile";
 const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get-recommendations";
@@ -31,7 +28,31 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// Global Platform Settings 
+// Custom Hashing for Passwords
+async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Generate Username 
+function cleanName(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, '_').replace(/^_|_$/g, '');
+}
+
+// Populate Autocomplete list on load
+async function loadAutocomplete() {
+    const snap = await getDocs(collection(db, "users"));
+    const datalist = document.getElementById("user-list");
+    datalist.innerHTML = "";
+    snap.forEach(docSnap => {
+        const u = docSnap.data();
+        datalist.innerHTML += `<option value="${u.username}">${u.name}</option>`;
+    });
+}
+
 async function loadPlatformSettings() {
     const snap = await getDoc(doc(db, "settings", "config"));
     if (snap.exists()) platformSettings = snap.data();
@@ -46,72 +67,125 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     showToast("Platform Settings Saved!");
 });
 
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        try {
-            document.getElementById("auth-section").classList.add("hidden");
-            document.getElementById("app-section").classList.remove("hidden");
-            document.getElementById("welcome-msg").innerText = "Loading profile data...";
-            await loadPlatformSettings();
-            await loadUserProfile(user.uid);
-        } catch (error) {
-            showToast("Error loading dashboard: " + error.message, "error");
-        }
-    } else {
-        document.getElementById("auth-section").classList.remove("hidden");
-        document.getElementById("app-section").classList.add("hidden");
-        currentUserProfile = null;
+// INITIALIZATION & SESSION CHECK
+document.addEventListener("DOMContentLoaded", async () => {
+    await loadAutocomplete();
+
+    const savedSession = localStorage.getItem("loggedInUser");
+    if (savedSession) {
+        document.getElementById("auth-section").classList.add("hidden");
+        document.getElementById("app-section").classList.remove("hidden");
+        document.getElementById("welcome-msg").innerText = "Loading profile data...";
+        await loadPlatformSettings();
+        await loadUserProfile(savedSession);
     }
 });
 
-document.getElementById("btn-register").addEventListener("click", async () => {
-    const email = document.getElementById("email").value;
+// LOGOUT
+window.logoutCustom = () => {
+    localStorage.removeItem("loggedInUser");
+    window.location.reload();
+};
+
+// CUSTOM LOGIN
+document.getElementById("btn-login").addEventListener("click", async (e) => {
+    const identifier = document.getElementById("login_identifier").value.trim();
     const password = document.getElementById("password").value;
-    const name = document.getElementById("name").value.trim();
+    const btn = e.target;
 
-    if (!email || !password || !name) return showToast("Email, Password, and Full Name are required.", "error");
+    if (!identifier || !password) return showToast("Enter Name/Username and password", "error");
 
-    const userData = {
-        name: name, exp: document.getElementById("exp").value, city: document.getElementById("city").value,
-        background: document.getElementById("background").value, current_domain: document.getElementById("domain").value,
-        linkedin: document.getElementById("linkedin").value.trim(), contact: document.getElementById("contact").value.trim(),
-        project_domain: document.getElementById("proj_domain").value, project_desc: document.getElementById("proj_desc").value,
-        status: "open", team_id: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
-    };
+    btn.innerText = "Logging in..."; btn.disabled = true;
+    try {
+        const hashedPass = await hashPassword(password);
+
+        // Search by username or full name
+        const qUsername = query(collection(db, "users"), where("username", "==", identifier));
+        const qName = query(collection(db, "users"), where("name", "==", identifier));
+
+        let snap = await getDocs(qUsername);
+        if (snap.empty) snap = await getDocs(qName);
+
+        if (snap.empty) {
+            showToast("User not found. Please click 'New Profile' to register.", "error");
+        } else {
+            const userDoc = snap.docs[0];
+            const userData = userDoc.data();
+
+            if (userData.password === hashedPass) {
+                localStorage.setItem("loggedInUser", userDoc.id);
+                window.location.reload(); // Reload to trigger session load
+            } else {
+                showToast("Incorrect password", "error");
+            }
+        }
+    } catch (error) { showToast("Login failed: " + error.message, "error"); }
+    finally { btn.innerText = "Login"; btn.disabled = false; }
+});
+
+// CUSTOM REGISTER (INCREMENTAL UID)
+document.getElementById("btn-register").addEventListener("click", async () => {
+    const identifier = document.getElementById("login_identifier").value.trim();
+    const password = document.getElementById("password").value;
+
+    if (!identifier || !password) return showToast("Name/Username and Password are required.", "error");
 
     try {
-        const userCred = await createUserWithEmailAndPassword(auth, email, password);
-        userData.uid = userCred.user.uid;
-        await setDoc(doc(db, "users", userCred.user.uid), userData);
+        const counterRef = doc(db, "metadata", "counter");
+        let counterSnap = await getDoc(counterRef);
+        if (!counterSnap.exists()) {
+            await setDoc(counterRef, { last_uid: 100 });
+            counterSnap = await getDoc(counterRef);
+        }
+
+        const newUidNum = counterSnap.data().last_uid + 1;
+        const uidStr = String(newUidNum);
+
+        let baseUsername = cleanName(identifier);
+        let finalUsername = baseUsername;
+
+        const usernameCheck = await getDocs(query(collection(db, "users"), where("username", "==", baseUsername)));
+        if (!usernameCheck.empty) {
+            finalUsername = `${baseUsername}_${uidStr}`;
+        }
+
+        const hashedPass = await hashPassword(password);
+
+        const userData = {
+            uid: uidStr, username: finalUsername, name: identifier, password: hashedPass,
+            exp: document.getElementById("exp").value, city: document.getElementById("city").value,
+            background: document.getElementById("background").value, current_domain: document.getElementById("domain").value,
+            linkedin: document.getElementById("linkedin").value.trim(), contact: document.getElementById("contact").value.trim(),
+            project_domain: document.getElementById("proj_domain").value, project_desc: document.getElementById("proj_desc").value,
+            status: "open", team_id: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
+        };
+
+        // Save new user
+        await setDoc(doc(db, "users", uidStr), userData);
+
+        // Update Counter
+        await updateDoc(counterRef, { last_uid: newUidNum });
 
         const combinedText = `Experience: ${userData.exp}, City: ${userData.city}, Domain: ${userData.current_domain}, Project: ${userData.project_desc}`;
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: userData.uid, combinedText: combinedText, status: userData.status })
+            body: JSON.stringify({ uid: uidStr, combinedText: combinedText, status: userData.status })
         });
-        showToast("Profile created successfully!");
+
+        showToast("Profile created! Logging in...");
+        localStorage.setItem("loggedInUser", uidStr);
+        setTimeout(() => window.location.reload(), 1000);
+
     } catch (error) { showToast(error.message, "error"); }
 });
 
-document.getElementById("btn-login").addEventListener("click", async (e) => {
-    const email = document.getElementById("email").value;
-    const password = document.getElementById("password").value;
-    const btn = e.target;
-    if (!email || !password) return showToast("Enter email and password", "error");
-
-    btn.innerText = "Logging in..."; btn.disabled = true;
-    try { await signInWithEmailAndPassword(auth, email, password); }
-    catch (error) { showToast("Login failed: " + error.message, "error"); }
-    finally { btn.innerText = "Login"; btn.disabled = false; }
-});
-
-// Load Profile & Control UI Visibility
+// Load Profile & Control UI
 async function loadUserProfile(uid) {
     try {
         const docSnap = await getDoc(doc(db, "users", uid));
         if (!docSnap.exists()) {
-            showToast("User profile not found. Please register again.", "error");
-            return await auth.signOut();
+            showToast("Profile missing.", "error");
+            return window.logoutCustom();
         }
 
         currentUserProfile = docSnap.data();
@@ -130,7 +204,6 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         }
 
-        // STRICT UI CONTROL: Solo / Teamed Up members cannot see the Search tab.
         if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
             document.getElementById("nav-search").classList.add("hidden");
             document.getElementById("nav-projects").click();
@@ -155,10 +228,11 @@ async function loadUserProfile(uid) {
 }
 
 function populateProfileForm(data) {
+    document.getElementById("edit_username").value = data.username || "";
     document.getElementById("edit_name").value = data.name || "";
     document.getElementById("edit_exp").value = data.exp || "1+";
     document.getElementById("edit_city").value = data.city || "";
-    document.getElementById("edit_background").value = data.background || "Tech";
+    document.getElementById("edit_background").value = data.background || "";
     document.getElementById("edit_domain").value = data.current_domain || "";
     document.getElementById("edit_linkedin").value = data.linkedin || "";
     document.getElementById("edit_contact").value = data.contact || "";
@@ -177,15 +251,12 @@ async function leaveTeam(userId, teamId) {
         if (projSnap.exists()) {
             let pData = projSnap.data();
             let members = pData.members || [];
-
             let remainingMembers = members.filter(m => m.uid !== userId);
 
             if (remainingMembers.length < 2) {
                 await deleteDoc(projRef);
-
                 for (let m of remainingMembers) {
                     await updateDoc(doc(db, "users", m.uid), { status: "open", team_id: null });
-
                     const otherSnap = await getDoc(doc(db, "users", m.uid));
                     if (otherSnap.exists()) {
                         const od = otherSnap.data();
@@ -214,19 +285,19 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
 
     try {
         if (currentUserProfile.team_id && (updatedData.status === "open" || updatedData.status === "solo")) {
-            await leaveTeam(auth.currentUser.uid, currentUserProfile.team_id);
+            await leaveTeam(currentUserProfile.uid, currentUserProfile.team_id);
             updatedData.team_id = null;
         }
 
         if (currentUserProfile.status === "solo" && updatedData.status === "open") {
-            await deleteDoc(doc(db, "projects", auth.currentUser.uid));
+            await deleteDoc(doc(db, "projects", currentUserProfile.uid));
         }
 
-        await updateDoc(doc(db, "users", auth.currentUser.uid), updatedData);
+        await updateDoc(doc(db, "users", currentUserProfile.uid), updatedData);
 
         if (updatedData.status === "solo") {
-            await setDoc(doc(db, "projects", auth.currentUser.uid), {
-                type: "solo", members: [{ uid: auth.currentUser.uid, name: updatedData.name }],
+            await setDoc(doc(db, "projects", currentUserProfile.uid), {
+                type: "solo", members: [{ uid: currentUserProfile.uid, name: updatedData.name }],
                 project_desc: updatedData.project_desc || "Working Solo"
             });
         }
@@ -234,7 +305,7 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
         const combinedText = `Experience: ${updatedData.exp}, City: ${updatedData.city}, Domain: ${updatedData.current_domain}, Project: ${updatedData.project_desc}`;
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: combinedText, status: updatedData.status })
+            body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: combinedText, status: updatedData.status })
         });
 
         showToast("Profile updated successfully!");
@@ -275,7 +346,7 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
             socialsHtml = `<div class="social-links" style="margin-top: 10px; display: flex; gap: 15px;">`;
             if (u.linkedin) socialsHtml += `<a href="${u.linkedin}" target="_blank" style="color: #0ea5e9; text-decoration: none; font-size: 0.9rem; font-weight: 500;">🔗 LinkedIn</a>`;
             if (u.contact) {
-                const waNum = u.contact.replace(/\D/g, ''); // Strip non-numeric chars for WhatsApp link
+                const waNum = u.contact.replace(/\D/g, '');
                 socialsHtml += `<a href="https://wa.me/${waNum}" target="_blank" style="color: #22c55e; text-decoration: none; font-size: 0.9rem; font-weight: 500;">💬 WhatsApp</a>`;
             }
             socialsHtml += `</div>`;
@@ -302,10 +373,8 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
 
 async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, isIncoming = false, isSentTab = false) {
     if (!uidArray || uidArray.length === 0) return renderUserCards([], containerId);
-
     document.getElementById(containerId).innerHTML = "<p class='text-muted'>Loading profiles...</p>";
     let allUsers = [];
-
     for (let i = 0; i < uidArray.length; i += 10) {
         const chunk = uidArray.slice(i, i + 10);
         try {
@@ -325,7 +394,7 @@ async function loadAllMembers() {
     const q = query(collection(db, "users"), where("status", "==", "open"));
     const querySnapshot = await getDocs(q);
     let allUsers = [];
-    querySnapshot.forEach(d => { if (d.id !== auth.currentUser.uid) allUsers.push({ id: d.id, ...d.data() }); });
+    querySnapshot.forEach(d => { if (d.id !== currentUserProfile.uid) allUsers.push({ id: d.id, ...d.data() }); });
     renderUserCards(allUsers, "all-results", true);
 }
 
@@ -340,12 +409,7 @@ window.loadAllProjects = async () => {
         const projectId = docSnap.id;
 
         let membersArray = p.members || [];
-        if (membersArray.length === 0 && p.member1_uid) {
-            membersArray = [{ uid: p.member1_uid, name: p.member1_name }];
-            if (p.member2_uid) membersArray.push({ uid: p.member2_uid, name: p.member2_name });
-        }
-
-        const isMyProject = auth.currentUser && membersArray.some(m => m.uid === auth.currentUser.uid);
+        const isMyProject = currentUserProfile && membersArray.some(m => m.uid === currentUserProfile.uid);
         const memberNamesStr = membersArray.map(m => m.name).join(' & ');
 
         let editHtml = "";
@@ -399,24 +463,25 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
     try {
         const res = await fetch(WEBHOOK_GET_RECO, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: combinedText })
+            body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: combinedText })
         });
         const rawResponse = await res.json();
 
         let extractedUids = [];
         function extractUids(obj) {
             if (!obj) return;
-            if (typeof obj === 'string' && obj.length === 28 && /^[a-zA-Z0-9]+$/.test(obj)) extractedUids.push(obj);
+            if (typeof obj === 'string' && /^[0-9]+$/.test(obj)) extractedUids.push(obj); // Extracts Custom Numeric IDs
+            else if (typeof obj === 'string' && obj.length === 28 && /^[a-zA-Z0-9]+$/.test(obj)) extractedUids.push(obj); // Legacy UIDs
             else if (Array.isArray(obj)) obj.forEach(extractUids);
             else if (typeof obj === 'object') {
-                if (obj.uid && typeof obj.uid === 'string' && obj.uid.length === 28) extractedUids.push(obj.uid);
-                else if (obj.id && typeof obj.id === 'string' && obj.id.length === 28) extractedUids.push(obj.id);
+                if (obj.uid && typeof obj.uid === 'string') extractedUids.push(obj.uid);
+                else if (obj.id && typeof obj.id === 'string') extractedUids.push(obj.id);
                 Object.values(obj).forEach(extractUids);
             }
         }
         extractUids(rawResponse);
 
-        let finalUidsArray = [...new Set(extractedUids)].filter(id => id !== auth.currentUser.uid);
+        let finalUidsArray = [...new Set(extractedUids)].filter(id => id !== currentUserProfile.uid);
         if (finalUidsArray.length === 0) {
             recoContainer.innerHTML = "<p class='text-muted'>No active AI matches found.</p>";
             return;
@@ -432,8 +497,8 @@ function loadInterests() {
 
 window.sendInterest = async (targetUid) => {
     try {
-        await updateDoc(doc(db, "users", targetUid), { interests_received: arrayUnion(auth.currentUser.uid) });
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_sent: arrayUnion(targetUid) });
+        await updateDoc(doc(db, "users", targetUid), { interests_received: arrayUnion(currentUserProfile.uid) });
+        await updateDoc(doc(db, "users", currentUserProfile.uid), { interests_sent: arrayUnion(targetUid) });
 
         currentUserProfile.interests_sent.push(targetUid);
         document.querySelectorAll(`#btn-send-${targetUid}`).forEach(btn => {
@@ -444,35 +509,32 @@ window.sendInterest = async (targetUid) => {
     } catch (e) { showToast("Failed to send interest", "error"); }
 };
 
-// CLEAN ARRAYS ON TEAM UP
 window.acceptInterest = async (requesterUid) => {
     try {
         const requesterSnap = await getDoc(doc(db, "users", requesterUid));
         const requesterName = requesterSnap.exists() ? requesterSnap.data().name : "Unknown Member";
         const requesterProj = requesterSnap.exists() ? requesterSnap.data().project_desc : "";
 
-        const teamId = auth.currentUser.uid + "_" + requesterUid;
+        const teamId = currentUserProfile.uid + "_" + requesterUid;
 
         await setDoc(doc(db, "projects", teamId), {
             type: "team",
             members: [
-                { uid: auth.currentUser.uid, name: currentUserProfile.name },
+                { uid: currentUserProfile.uid, name: currentUserProfile.name },
                 { uid: requesterUid, name: requesterName }
             ],
             project_desc: currentUserProfile.project_desc || requesterProj || "TBD"
         });
 
-        // Wipe interests array clean so ghost requests don't linger in DB
-        await updateDoc(doc(db, "users", auth.currentUser.uid), {
-            status: "teamed_up", team_id: teamId,
-            interests_received: [], interests_sent: []
+        // WIPE ARRAYS ON ACCEPT
+        await updateDoc(doc(db, "users", currentUserProfile.uid), {
+            status: "teamed_up", team_id: teamId, interests_received: [], interests_sent: []
         });
         await updateDoc(doc(db, "users", requesterUid), {
-            status: "teamed_up", team_id: teamId,
-            interests_received: [], interests_sent: []
+            status: "teamed_up", team_id: teamId, interests_received: [], interests_sent: []
         });
 
-        fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: "", status: "teamed_up" }) });
+        fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: "", status: "teamed_up" }) });
         fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: requesterUid, combinedText: "", status: "teamed_up" }) });
 
         showToast("Team successfully formed! Reloading...");
@@ -482,10 +544,10 @@ window.acceptInterest = async (requesterUid) => {
 
 window.rejectInterest = async (requesterUid) => {
     try {
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_received: arrayRemove(requesterUid) });
+        await updateDoc(doc(db, "users", currentUserProfile.uid), { interests_received: arrayRemove(requesterUid) });
         await updateDoc(doc(db, "users", requesterUid), {
-            interests_sent: arrayRemove(auth.currentUser.uid),
-            interests_rejected: arrayUnion(auth.currentUser.uid)
+            interests_sent: arrayRemove(currentUserProfile.uid),
+            interests_rejected: arrayUnion(currentUserProfile.uid)
         });
 
         currentUserProfile.interests_received = currentUserProfile.interests_received.filter(id => id !== requesterUid);

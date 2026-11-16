@@ -160,7 +160,6 @@
             margin: 40px auto;
         }
 
-        /* Tab Navigation (Main & Nested) */
         .tab-bar {
             display: flex;
             gap: 10px;
@@ -311,26 +310,27 @@
 <body>
     <div id="toast-container"></div>
 
+    <!-- Auth Section (Custom Username System) -->
     <div id="auth-section" class="card auth-box">
         <h2 style="text-align: center; margin-bottom: 24px;">Welcome</h2>
         <div class="form-group">
-            <label for="email">Email Address <span style="color:var(--danger)">*</span></label>
-            <input type="email" id="email" placeholder="you@example.com" required>
+            <label for="login_identifier">Name or Username <span style="color:var(--danger)">*</span></label>
+            <input type="text" id="login_identifier" list="user-list" placeholder="Search your name..."
+                autocomplete="off">
+            <datalist id="user-list"></datalist>
         </div>
         <div class="form-group">
             <label for="password">Password <span style="color:var(--danger)">*</span></label>
-            <input type="password" id="password" placeholder="••••••••" required>
+            <input type="password" id="password" placeholder="••••••••">
         </div>
         <div class="flex-between" style="gap: 12px; margin-top: 24px;">
             <button id="btn-login" class="btn btn-primary">Login</button>
-            <button id="btn-toggle-register" class="btn btn-outline">Need an account?</button>
+            <button id="btn-toggle-register" class="btn btn-outline">New Profile</button>
         </div>
 
         <div id="register-fields" class="hidden"
             style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 24px;">
-            <h3>Create Profile</h3>
-            <div class="form-group"><label for="name">Full Name <span style="color:var(--danger)">*</span></label><input
-                    type="text" id="name" required></div>
+            <h3 style="color: var(--primary);">Registration Details</h3>
 
             <div class="form-group"><label for="exp">Experience</label>
                 <select id="exp">
@@ -344,11 +344,13 @@
             <div class="form-group"><label for="city">City</label><input type="text" id="city"></div>
             <div class="form-group"><label for="background">Background</label>
                 <select id="background">
+                    <option value="" selected>Not Set</option>
                     <option value="Tech">Tech</option>
                     <option value="Non-Tech">Non-Tech</option>
                 </select>
             </div>
-            <div class="form-group"><label for="domain">Work Domain</label><input type="text" id="domain"></div>
+            <div class="form-group"><label for="domain">Work Domain</label><input type="text" id="domain"
+                    placeholder="e.g. Finance, Healthcare, Retail"></div>
 
             <!-- Optional Socials -->
             <div class="form-group"><label for="linkedin">LinkedIn URL (Optional)</label><input type="url" id="linkedin"
@@ -356,19 +358,20 @@
             <div class="form-group"><label for="contact">WhatsApp Number (Optional)</label><input type="text"
                     id="contact" placeholder="e.g., 919876543210"></div>
 
-            <div class="form-group"><label for="proj_domain">Project Domain</label><input type="text" id="proj_domain">
-            </div>
-            <div class="form-group"><label for="proj_desc">Project Idea</label><textarea id="proj_desc"
-                    rows="3"></textarea></div>
+            <div class="form-group"><label for="proj_domain">Project Domain</label><input type="text" id="proj_domain"
+                    placeholder="e.g. LLM Agents, RAG, Vision AI"></div>
+            <div class="form-group"><label for="proj_desc">Project Idea</label><textarea id="proj_desc" rows="3"
+                    placeholder="Describe your project idea..."></textarea></div>
             <button id="btn-register" class="btn btn-primary" style="margin-top: 10px;">Register & Create
                 Profile</button>
         </div>
     </div>
 
+    <!-- Main App Section -->
     <div id="app-section" class="hidden">
         <div class="flex-between" style="margin-bottom: 24px;">
             <h2 id="welcome-msg"></h2>
-            <button onclick="auth.signOut()" class="btn btn-danger"
+            <button onclick="window.logoutCustom()" class="btn btn-danger"
                 style="width: auto; font-size: 0.875rem; padding: 6px 12px;">Logout</button>
         </div>
 
@@ -382,7 +385,7 @@
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
-        <!-- MAIN TAB CONTENT: SEARCH (Nested) -->
+        <!-- SEARCH (Nested) -->
         <div id="tab-search" class="main-tab-content">
             <div class="tab-bar sub-tabs">
                 <button class="sub-btn active" onclick="showSubTab('sub-recos', this)">AI Recos</button>
@@ -427,7 +430,7 @@
             </div>
         </div>
 
-        <!-- MAIN TAB CONTENT: PROJECTS -->
+        <!-- PROJECTS -->
         <div id="tab-projects" class="main-tab-content hidden">
             <div class="flex-between" style="margin-bottom: 20px;">
                 <div>
@@ -437,7 +440,7 @@
             <div id="projects-results"></div>
         </div>
 
-        <!-- MAIN TAB CONTENT: ADMIN -->
+        <!-- ADMIN -->
         <div id="tab-admin" class="main-tab-content hidden">
             <div class="card" style="border-color: var(--danger);">
                 <h3 style="color: var(--danger);">Admin Dashboard</h3>
@@ -456,7 +459,7 @@
             </div>
         </div>
 
-        <!-- MAIN TAB CONTENT: PROFILE -->
+        <!-- PROFILE -->
         <div id="tab-profile" class="main-tab-content hidden">
             <div class="card">
                 <h3>Update Your Information</h3>
@@ -468,6 +471,8 @@
                         <option value="teamed_up">Teamed Up</option>
                     </select>
                 </div>
+                <div class="form-group"><label>Username (Read-Only)</label><input type="text" id="edit_username"
+                        disabled style="opacity:0.6;"></div>
                 <div class="form-group"><label>Full Name</label><input type="text" id="edit_name" required></div>
 
                 <div class="form-group"><label>Experience</label>
@@ -482,18 +487,21 @@
                 <div class="form-group"><label>City</label><input type="text" id="edit_city"></div>
                 <div class="form-group"><label>Background</label>
                     <select id="edit_background">
+                        <option value="" selected>Not Set</option>
                         <option value="Tech">Tech</option>
                         <option value="Non-Tech">Non-Tech</option>
                     </select>
                 </div>
-                <div class="form-group"><label>Work Domain</label><input type="text" id="edit_domain"></div>
+                <div class="form-group"><label>Work Domain</label><input type="text" id="edit_domain"
+                        placeholder="e.g. Finance, Healthcare, Retail"></div>
 
                 <div class="form-group"><label>LinkedIn URL (Optional)</label><input type="url" id="edit_linkedin">
                 </div>
                 <div class="form-group"><label>WhatsApp Number (Optional)</label><input type="text" id="edit_contact">
                 </div>
 
-                <div class="form-group"><label>Project Domain</label><input type="text" id="edit_proj_domain"></div>
+                <div class="form-group"><label>Project Domain</label><input type="text" id="edit_proj_domain"
+                        placeholder="e.g. LLM Agents, RAG, Vision AI"></div>
                 <div class="form-group"><label>Project Idea</label><textarea id="edit_proj_desc" rows="3"></textarea>
                 </div>
                 <button id="btn-update-profile" class="btn btn-primary" style="margin-top: 15px;">Save Changes</button>
@@ -503,7 +511,6 @@
 
     <script type="module" src="js/app.js"></script>
     <script>
-        // Main Tab Navigation
         function showMainTab(tabId, btnElement) {
             document.querySelectorAll('.main-tab-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(tabId).classList.remove('hidden');
@@ -512,7 +519,6 @@
             if (btnElement) btnElement.classList.add('active');
         }
 
-        // Sub Tab Navigation (Search Module)
         function showSubTab(tabId, btnElement) {
             document.querySelectorAll('.sub-tab-content').forEach(el => el.classList.add('hidden'));
             document.getElementById(tabId).classList.remove('hidden');
