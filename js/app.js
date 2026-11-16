@@ -32,16 +32,19 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// SEMANTIC OPTIMIZATION: Prioritize Domain and Project Idea for better AI Vector Matching
+// SEMANTIC OPTIMIZATION: Hierarchical Vector Weighting
 function generateEmbeddingText(u) {
-    const idea = u.project_desc || 'Open to ideas';
-    const projDomain = u.project_domain || 'Any';
-    const workDomain = u.current_domain || 'Any';
-    const bg = u.background || 'Any';
+    const idea = (u.project_desc && u.project_desc.trim() !== "") ? u.project_desc : 'Open to collaborative ideas';
+    const projDomain = (u.project_domain && u.project_domain.trim() !== "") ? u.project_domain : 'General';
+    const workDomain = (u.current_domain && u.current_domain.trim() !== "") ? u.current_domain : 'General';
+    const bg = (u.background && u.background.trim() !== "") ? u.background : 'General';
+
+    // Fallback variables for users without specific project concepts
     const exp = u.exp || '1+';
     const city = u.city || 'Anywhere';
 
-    return `Core Project Idea: ${idea}. Target Project Domain: ${projDomain}. Current Work Domain: ${workDomain}. Professional Background: ${bg}. Experience Level: ${exp}. Location: ${city}.`;
+    // Projects first (High Attention), Location/Exp last (Tie-Breaker)
+    return `Primary Project Focus: ${idea}. Target Project Domain: ${projDomain}. Industry Expertise: ${workDomain}. Professional Background: ${bg}. Location: ${city}. Experience Level: ${exp}.`;
 }
 
 async function hashPassword(password) {
