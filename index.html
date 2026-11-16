@@ -347,7 +347,6 @@
             <button class="tab-btn" onclick="showTab('tab-random', this)">Random</button>
             <button class="tab-btn" onclick="showTab('tab-all', this)">All Open</button>
 
-            <!-- REQ 1: Red Dot hides on click using inline JS -->
             <button class="tab-btn"
                 onclick="showTab('tab-interests', this); document.getElementById('nav-red-dot').classList.add('hidden');">
                 Received <span id="nav-red-dot" class="red-dot hidden">•</span>
@@ -358,13 +357,6 @@
             <button class="tab-btn" onclick="showTab('tab-profile', this)">Profile</button>
             <button class="tab-btn hidden" id="tab-btn-admin" onclick="showTab('tab-admin', this)"
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
-        </div>
-
-        <div id="partner-alert" class="hidden card"
-            style="background-color: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
-            <h3 style="color: var(--success);">🎉 You are teamed up! (Or Solo)</h3>
-            <p class="text-muted">You are no longer accepting requests. Browse the Projects tab to see other teams.</p>
-            <div id="partner-details" style="margin-top: 20px;"></div>
         </div>
 
         <div id="tab-recommendations" class="tab-content">
@@ -405,7 +397,7 @@
         <div id="tab-projects" class="tab-content hidden">
             <div class="flex-between" style="margin-bottom: 20px;">
                 <div>
-                    <h3>Finalized Projects & Teams</h3>
+                    <h3>Project Teams</h3>
                 </div>
                 <button onclick="loadAllProjects()" class="btn btn-outline"
                     style="width: auto; padding: 4px 10px; font-size: 0.85rem;">Refresh</button>
@@ -419,6 +411,15 @@
                 <p class="text-muted" style="margin-bottom: 20px;">Generate a new round of 5 random matches for every
                     currently "open" member.</p>
                 <button id="btn-admin-random" class="btn btn-danger">Generate Random Round for All</button>
+
+                <hr style="border-color: rgba(255,255,255,0.1); margin: 24px 0;">
+
+                <h4 style="color: var(--primary);">Platform Settings</h4>
+                <div class="form-group" style="margin-top: 15px; max-width: 200px;">
+                    <label>Max Members per Group</label>
+                    <input type="number" id="admin-max-members" value="2" min="2">
+                </div>
+                <button id="btn-save-settings" class="btn btn-outline" style="width: auto;">Save Settings</button>
             </div>
         </div>
 
@@ -426,11 +427,11 @@
             <div class="card">
                 <h3>Update Your Information</h3>
                 <div class="form-group">
-                    <label>Status (Changes visibility)</label>
+                    <label>Status</label>
                     <select id="edit_status">
                         <option value="open">Open (Looking for team)</option>
                         <option value="solo">Solo (Working Alone)</option>
-                        <option value="teamed_up" disabled>Teamed Up</option>
+                        <option value="teamed_up">Teamed Up</option>
                     </select>
                 </div>
                 <div class="form-group"><label>Full Name</label><input type="text" id="edit_name" required></div>

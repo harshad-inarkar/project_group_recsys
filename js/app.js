@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, arrayUnion, arrayRemove, collection, query, where, documentId } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, query, where, documentId } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCmrY4OLmNdTFS_jBQdzAKMMtARAegB5kw",
@@ -20,6 +20,7 @@ const WEBHOOK_EMBED_PROFILE = "https://harshad-agentic-demo.app.n8n.cloud/webhoo
 const WEBHOOK_GET_RECO = "https://harshad-agentic-demo.app.n8n.cloud/webhook/get-recommendations";
 
 let currentUserProfile = null;
+let platformSettings = { maxMembers: 2 }; // Default setting
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -30,12 +31,31 @@ function showToast(message, type = "success") {
     setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
+// Load Global Admin Settings
+async function loadPlatformSettings() {
+    const snap = await getDoc(doc(db, "settings", "config"));
+    if (snap.exists()) {
+        platformSettings = snap.data();
+    }
+    const adminInput = document.getElementById("admin-max-members");
+    if (adminInput) adminInput.value = platformSettings.maxMembers || 2;
+}
+
+// Admin: Save Global Settings
+document.getElementById("btn-save-settings").addEventListener("click", async () => {
+    const max = parseInt(document.getElementById("admin-max-members").value);
+    await setDoc(doc(db, "settings", "config"), { maxMembers: max }, { merge: true });
+    platformSettings.maxMembers = max;
+    showToast("Platform Settings Saved!");
+});
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
             document.getElementById("auth-section").classList.add("hidden");
             document.getElementById("app-section").classList.remove("hidden");
             document.getElementById("welcome-msg").innerText = "Loading profile data...";
+            await loadPlatformSettings();
             await loadUserProfile(user.uid);
         } catch (error) {
             showToast("Error loading dashboard: " + error.message, "error");
@@ -59,7 +79,7 @@ document.getElementById("btn-register").addEventListener("click", async () => {
         name: name, exp: document.getElementById("exp").value, city: document.getElementById("city").value,
         background: document.getElementById("background").value, current_domain: document.getElementById("domain").value,
         project_domain: document.getElementById("proj_domain").value, project_desc: document.getElementById("proj_desc").value,
-        status: "open", partner_uid: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
+        status: "open", team_id: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
     };
 
     try {
@@ -100,7 +120,6 @@ async function loadUserProfile(uid) {
 
         currentUserProfile = docSnap.data();
 
-        // Safety initialization for older arrays
         if (!currentUserProfile.interests_sent) currentUserProfile.interests_sent = [];
         if (!currentUserProfile.interests_received) currentUserProfile.interests_received = [];
         if (!currentUserProfile.interests_rejected) currentUserProfile.interests_rejected = [];
@@ -109,8 +128,11 @@ async function loadUserProfile(uid) {
         document.getElementById("welcome-msg").innerText = `Welcome, ${currentUserProfile.name}`;
         populateProfileForm(currentUserProfile);
 
-        if (currentUserProfile.isAdmin) {
+        const checkAdmin = currentUserProfile.isAdmin === true || String(currentUserProfile.isAdmin).toLowerCase() === "true";
+        if (checkAdmin) {
             document.getElementById("tab-btn-admin").classList.remove("hidden");
+        } else {
+            document.getElementById("tab-btn-admin").classList.add("hidden");
         }
 
         if (currentUserProfile.interests_received.length > 0) {
@@ -119,27 +141,13 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.add("hidden");
         }
 
-        if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
-            document.getElementById("partner-alert").classList.remove("hidden");
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                const text = btn.innerText;
-                if (text.includes('Recos') || text.includes('Random') || text.includes('All Open') || text.includes('Received') || text.includes('Sent')) {
-                    btn.classList.add('hidden');
-                }
-            });
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-
-            if (currentUserProfile.status === "teamed_up" && currentUserProfile.partner_uid) {
-                await fetchAndRenderUsers([currentUserProfile.partner_uid], "partner-details", false);
-            }
-        } else {
-            await loadAllMembers();
-            loadInterests();
-            fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
-            fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
-        }
-
+        // Removed UI Locking for Teamed Up / Solo members. Just load all tabs cleanly.
+        await loadAllMembers();
+        loadInterests();
+        fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
+        fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
         window.loadAllProjects();
+
     } catch (error) { console.error(error); showToast("Failed to load user data.", "error"); }
 }
 
@@ -154,7 +162,46 @@ function populateProfileForm(data) {
     document.getElementById("edit_status").value = data.status || "open";
 }
 
-// Update Profile & Handle Solo Status
+// Handle Leaving a Team
+async function leaveTeam(userId, teamId) {
+    const projSnap = await getDoc(doc(db, "projects", teamId));
+    if (projSnap.exists()) {
+        let projData = projSnap.data();
+        let members = projData.members || [];
+
+        // Backwards compatibility if using old member1/member2 schema
+        if (members.length === 0 && projData.member1_uid) {
+            members = [{ uid: projData.member1_uid, name: projData.member1_name }, { uid: projData.member2_uid, name: projData.member2_name }];
+        }
+
+        members = members.filter(m => m.uid !== userId);
+
+        if (members.length < 2) {
+            // Delete project entirely
+            await deleteDoc(doc(db, "projects", teamId));
+
+            // Release remaining members back to open
+            for (let m of members) {
+                await updateDoc(doc(db, "users", m.uid), { status: "open", team_id: null });
+
+                // Force Update Vector DB for the other remaining member
+                const otherSnap = await getDoc(doc(db, "users", m.uid));
+                if (otherSnap.exists()) {
+                    const od = otherSnap.data();
+                    fetch(WEBHOOK_EMBED_PROFILE, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ uid: m.uid, combinedText: `Experience: ${od.exp}, City: ${od.city}, Domain: ${od.current_domain}, Project: ${od.project_desc}`, status: "open" })
+                    });
+                }
+            }
+        } else {
+            // Future proof: If team still has >= 2 members, just update the array
+            await updateDoc(doc(db, "projects", teamId), { members: members });
+        }
+    }
+}
+
+// Update Profile
 document.getElementById("btn-update-profile").addEventListener("click", async () => {
     const updatedData = {
         name: document.getElementById("edit_name").value.trim(), exp: document.getElementById("edit_exp").value,
@@ -165,11 +212,23 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     if (!updatedData.name) return showToast("Name is required", "error");
 
     try {
+        // Handle leaving a team if changing to Open or Solo
+        if (currentUserProfile.team_id && (updatedData.status === "open" || updatedData.status === "solo")) {
+            await leaveTeam(auth.currentUser.uid, currentUserProfile.team_id);
+            updatedData.team_id = null;
+        }
+
+        // Handle destroying a Solo project if switching back to Open
+        if (currentUserProfile.status === "solo" && updatedData.status === "open") {
+            await deleteDoc(doc(db, "projects", auth.currentUser.uid));
+        }
+
         await updateDoc(doc(db, "users", auth.currentUser.uid), updatedData);
 
+        // Create Solo Project
         if (updatedData.status === "solo") {
             await setDoc(doc(db, "projects", auth.currentUser.uid), {
-                type: "solo", member1_uid: auth.currentUser.uid, member1_name: updatedData.name,
+                type: "solo", members: [{ uid: auth.currentUser.uid, name: updatedData.name }],
                 project_desc: updatedData.project_desc || "Working Solo"
             });
         }
@@ -185,7 +244,7 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     } catch (e) { showToast("Failed to update profile", "error"); }
 });
 
-// Master Render function for user cards
+// Master Render function
 function renderUserCards(usersDataArray, containerId, allowActions = true, isSentTab = false) {
     const container = document.getElementById(containerId);
     if (!usersDataArray || usersDataArray.length === 0) {
@@ -195,7 +254,7 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
     let html = "";
     usersDataArray.forEach((u) => {
         let actionButtons = '';
-        if (allowActions) {
+        if (allowActions && currentUserProfile.status === "open") {
             const receivedInterests = currentUserProfile.interests_received || [];
             const sentInterests = currentUserProfile.interests_sent || [];
             const rejectedInterests = currentUserProfile.interests_rejected || [];
@@ -206,7 +265,6 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
             } else if (sentInterests.includes(u.id)) {
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Request Pending</button>`;
             } else if (rejectedInterests.includes(u.id)) {
-                // REQ 2: Block sending to people who rejected you
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.5; border-color: rgba(244,63,94,0.4); color: var(--danger); cursor: not-allowed;">Rejected</button>`;
             } else {
                 actionButtons = `<button class="btn btn-outline" id="btn-send-${u.id}" onclick="sendInterest('${u.id}')">Send Interest</button>`;
@@ -235,21 +293,26 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
 
 async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, isIncoming = false, isSentTab = false) {
     if (!uidArray || uidArray.length === 0) return renderUserCards([], containerId);
+
     document.getElementById(containerId).innerHTML = "<p class='text-muted'>Loading profiles...</p>";
     let allUsers = [];
+
     for (let i = 0; i < uidArray.length; i += 10) {
         const chunk = uidArray.slice(i, i + 10);
-        const q = query(collection(db, "users"), where(documentId(), "in", chunk));
-        const snap = await getDocs(q);
-        snap.forEach(docSnap => {
-            const data = docSnap.data();
-            if (data.status === "open") allUsers.push({ id: docSnap.id, ...data });
-        });
+        try {
+            const q = query(collection(db, "users"), where(documentId(), "in", chunk));
+            const snap = await getDocs(q);
+            snap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.status === "open") allUsers.push({ id: docSnap.id, ...data });
+            });
+        } catch (error) {
+            console.warn("Skipping invalid or deleted UIDs in chunk:", chunk);
+        }
     }
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
-// Fetch "All Members" ensuring only 'open' users
 async function loadAllMembers() {
     document.getElementById("all-results").innerHTML = "<p class='text-muted'>Loading open members...</p>";
     const q = query(collection(db, "users"), where("status", "==", "open"));
@@ -259,7 +322,7 @@ async function loadAllMembers() {
     renderUserCards(allUsers, "all-results", true);
 }
 
-// Req 6: Fetch and display Projects & Req 3: Edit Idea Logic
+// Editable Projects using Future-Proof Members Array
 window.loadAllProjects = async () => {
     const container = document.getElementById("projects-results");
     container.innerHTML = "<p class='text-muted'>Loading projects...</p>";
@@ -270,8 +333,15 @@ window.loadAllProjects = async () => {
         const p = docSnap.data();
         const projectId = docSnap.id;
 
-        // REQ 3: Check if logged in user owns this project
-        const isMyProject = (auth.currentUser && (auth.currentUser.uid === p.member1_uid || auth.currentUser.uid === p.member2_uid));
+        // Parse Members safely
+        let membersArray = p.members || [];
+        if (membersArray.length === 0 && p.member1_uid) {
+            membersArray = [{ uid: p.member1_uid, name: p.member1_name }];
+            if (p.member2_uid) membersArray.push({ uid: p.member2_uid, name: p.member2_name });
+        }
+
+        const isMyProject = auth.currentUser && membersArray.some(m => m.uid === auth.currentUser.uid);
+        const memberNamesStr = membersArray.map(m => m.name).join(' & ');
 
         let editHtml = "";
         if (isMyProject) {
@@ -286,7 +356,7 @@ window.loadAllProjects = async () => {
 
         html += `<div class="card" style="border-left: 4px solid var(--primary);">
             <h4 style="color:var(--primary);">${p.type === 'team' ? '🤝 Team' : '👤 Solo Project'}</h4>
-            <p style="margin: 5px 0 10px;"><strong>Members:</strong> ${p.type === 'team' ? p.member1_name + ' & ' + p.member2_name : p.member1_name}</p>
+            <p style="margin: 5px 0 10px;"><strong>Members:</strong> ${memberNamesStr}</p>
             <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
                 <strong style="color:var(--primary); font-size:0.875rem;">Final Project Idea:</strong><br/> 
                 <span id="text-proj-${projectId}" style="font-size:0.95rem; display:block; margin-top:5px;">${p.project_desc}</span>
@@ -312,66 +382,45 @@ window.saveProjectIdea = async (projectId) => {
     try {
         await updateDoc(doc(db, "projects", projectId), { project_desc: newIdea });
         showToast("Project Idea Updated!");
-        window.loadAllProjects(); // Refresh UI instantly
+        window.loadAllProjects();
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-/// Fetch AI Recos (FIXED: Ultimate Fallback Parser for n8n JSON)
+
+// Fetch AI Recos 
 document.getElementById("btn-get-reco").addEventListener("click", async () => {
     const recoContainer = document.getElementById("reco-results");
     recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
-
     const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
 
     try {
         const res = await fetch(WEBHOOK_GET_RECO, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: combinedText })
         });
-
         const rawResponse = await res.json();
-        console.log("N8N Raw Response:", rawResponse); // Added for console debugging
 
         let extractedUids = [];
-
-        // Recursive function to aggressively find UIDs anywhere in the n8n payload
         function extractUids(obj) {
             if (!obj) return;
-
-            // If it's a string that looks like a Firebase UID (typically 28 alphanumeric chars)
-            if (typeof obj === 'string' && obj.length > 20 && /^[a-zA-Z0-9_-]+$/.test(obj)) {
-                extractedUids.push(obj);
-            }
-            // If it's an array, scan every item
-            else if (Array.isArray(obj)) {
-                obj.forEach(extractUids);
-            }
-            // If it's an object, check its keys and values
+            if (typeof obj === 'string' && obj.length === 28 && /^[a-zA-Z0-9]+$/.test(obj)) extractedUids.push(obj);
+            else if (Array.isArray(obj)) obj.forEach(extractUids);
             else if (typeof obj === 'object') {
-                if (obj.uid && typeof obj.uid === 'string') {
-                    extractedUids.push(obj.uid); // Found a direct uid key
-                }
-                Object.values(obj).forEach(extractUids); // Scan all other nested properties
+                if (obj.uid && typeof obj.uid === 'string' && obj.uid.length === 28) extractedUids.push(obj.uid);
+                else if (obj.id && typeof obj.id === 'string' && obj.id.length === 28) extractedUids.push(obj.id);
+                Object.values(obj).forEach(extractUids);
             }
         }
-
-        // Run the extractor
         extractUids(rawResponse);
 
-        // Clean the array: Remove duplicates and remove the user's own UID
         let finalUidsArray = [...new Set(extractedUids)].filter(id => id !== auth.currentUser.uid);
-
         if (finalUidsArray.length === 0) {
-            recoContainer.innerHTML = "<p class='text-muted'>No active AI matches found. Try updating your profile description!</p>";
+            recoContainer.innerHTML = "<p class='text-muted'>No active AI matches found.</p>";
             return;
         }
-
-        // Fetch up to Top 5 matches from Firebase and display them
         fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
 
     } catch (e) {
-        console.error("AI Fetch Error:", e);
         showToast("Error connecting to AI. Check console.", "error");
         recoContainer.innerHTML = "<p class='text-muted'>Failed to load matches.</p>";
     }
@@ -381,7 +430,6 @@ function loadInterests() {
     fetchAndRenderUsers(currentUserProfile.interests_received || [], "interests-results", true);
 }
 
-// Actions
 window.sendInterest = async (targetUid) => {
     try {
         await updateDoc(doc(db, "users", targetUid), { interests_received: arrayUnion(auth.currentUser.uid) });
@@ -396,20 +444,26 @@ window.sendInterest = async (targetUid) => {
     } catch (e) { showToast("Failed to send interest", "error"); }
 };
 
+// Form Team with Array Support
 window.acceptInterest = async (requesterUid) => {
     try {
         const requesterSnap = await getDoc(doc(db, "users", requesterUid));
         const requesterName = requesterSnap.exists() ? requesterSnap.data().name : "Unknown Member";
         const requesterProj = requesterSnap.exists() ? requesterSnap.data().project_desc : "";
 
-        await setDoc(doc(db, "projects", auth.currentUser.uid + "_" + requesterUid), {
-            type: "team", member1_uid: auth.currentUser.uid, member1_name: currentUserProfile.name,
-            member2_uid: requesterUid, member2_name: requesterName,
+        const teamId = auth.currentUser.uid + "_" + requesterUid;
+
+        await setDoc(doc(db, "projects", teamId), {
+            type: "team",
+            members: [
+                { uid: auth.currentUser.uid, name: currentUserProfile.name },
+                { uid: requesterUid, name: requesterName }
+            ],
             project_desc: currentUserProfile.project_desc || requesterProj || "TBD"
         });
 
-        await updateDoc(doc(db, "users", auth.currentUser.uid), { status: "teamed_up", partner_uid: requesterUid });
-        await updateDoc(doc(db, "users", requesterUid), { status: "teamed_up", partner_uid: auth.currentUser.uid });
+        await updateDoc(doc(db, "users", auth.currentUser.uid), { status: "teamed_up", team_id: teamId });
+        await updateDoc(doc(db, "users", requesterUid), { status: "teamed_up", team_id: teamId });
 
         fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: auth.currentUser.uid, combinedText: "", status: "teamed_up" }) });
         fetch(WEBHOOK_EMBED_PROFILE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: requesterUid, combinedText: "", status: "teamed_up" }) });
@@ -419,12 +473,9 @@ window.acceptInterest = async (requesterUid) => {
     } catch (e) { showToast("Failed to form team", "error"); }
 };
 
-// REQ 2: Permanent Rejection Tracking
 window.rejectInterest = async (requesterUid) => {
     try {
-        // Remove from receiver (you)
         await updateDoc(doc(db, "users", auth.currentUser.uid), { interests_received: arrayRemove(requesterUid) });
-        // Remove from sender and add to their rejected list
         await updateDoc(doc(db, "users", requesterUid), {
             interests_sent: arrayRemove(auth.currentUser.uid),
             interests_rejected: arrayUnion(auth.currentUser.uid)
@@ -432,12 +483,10 @@ window.rejectInterest = async (requesterUid) => {
 
         currentUserProfile.interests_received = currentUserProfile.interests_received.filter(id => id !== requesterUid);
         loadInterests();
-
         showToast("Interest rejected.");
     } catch (e) { showToast("Failed to reject", "error"); }
 };
 
-// Admin Random Round Logic
 document.getElementById("btn-admin-random").addEventListener("click", async (e) => {
     const btn = e.target;
     btn.innerText = "Processing..."; btn.disabled = true;
