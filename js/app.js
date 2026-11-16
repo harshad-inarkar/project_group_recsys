@@ -508,7 +508,14 @@ window.saveProjectIdea = async (projectId) => {
     } catch (e) { showToast("Failed to update idea", "error"); }
 };
 
-document.getElementById("btn-get-reco").addEventListener("click", async () => {
+d// --- NEW: Track if Recos have been loaded ---
+let hasLoadedRecos = false;
+
+// Extract to a globally accessible function
+window.fetchAIRecos = async (forceRefresh = false) => {
+    // If already loaded and the user didn't explicitly click refresh, do nothing.
+    if (hasLoadedRecos && !forceRefresh) return;
+
     const recoContainer = document.getElementById("reco-results");
     recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
     const combinedText = `Experience: ${currentUserProfile.exp}, City: ${currentUserProfile.city}, Domain: ${currentUserProfile.current_domain}, Project: ${currentUserProfile.project_desc}`;
@@ -523,8 +530,8 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
         let extractedUids = [];
         function extractUids(obj) {
             if (!obj) return;
-            if (typeof obj === 'string' && /^[0-9]+$/.test(obj)) extractedUids.push(obj); // Extracts Custom Numeric IDs
-            else if (typeof obj === 'string' && obj.length === 28 && /^[a-zA-Z0-9]+$/.test(obj)) extractedUids.push(obj); // Legacy UIDs
+            if (typeof obj === 'string' && /^[0-9]+$/.test(obj)) extractedUids.push(obj);
+            else if (typeof obj === 'string' && obj.length === 28 && /^[a-zA-Z0-9]+$/.test(obj)) extractedUids.push(obj);
             else if (Array.isArray(obj)) obj.forEach(extractUids);
             else if (typeof obj === 'object') {
                 if (obj.uid && typeof obj.uid === 'string') extractedUids.push(obj.uid);
@@ -539,9 +546,16 @@ document.getElementById("btn-get-reco").addEventListener("click", async () => {
             recoContainer.innerHTML = "<p class='text-muted'>No active AI matches found.</p>";
             return;
         }
+
         fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
+        hasLoadedRecos = true; // Mark as successfully loaded
 
     } catch (e) { showToast("Error connecting to AI. Check console.", "error"); }
+};
+
+// Bind the manual refresh button (forces an update)
+document.getElementById("btn-get-reco").addEventListener("click", () => {
+    window.fetchAIRecos(true);
 });
 
 function loadInterests() {
