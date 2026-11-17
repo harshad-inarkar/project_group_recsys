@@ -308,6 +308,18 @@
         .dropdown-item:hover {
             background: rgba(255, 255, 255, 0.1);
         }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (min-width: 600px) {
+            .filter-grid {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -377,14 +389,13 @@
             <button class="tab-btn active" id="nav-profile" onclick="showMainTab('tab-profile', this)">Profile</button>
             <button class="tab-btn" id="nav-projects"
                 onclick="showMainTab('tab-projects', this); window.loadAllProjects();">Projects</button>
-
             <button class="tab-btn" id="nav-search"
-                onclick="showMainTab('tab-search', this); document.getElementById('btn-sub-all').click();">Search</button>
-
+                onclick="showMainTab('tab-search', this); document.getElementById('btn-sub-member-search').click();">Search</button>
             <button class="tab-btn hidden" id="nav-admin" onclick="showMainTab('tab-admin', this)"
                 style="border: 1px solid var(--danger); color: var(--danger);">Admin</button>
         </div>
 
+        <!-- PROFILE (Default Tab) -->
         <div id="tab-profile" class="main-tab-content">
             <div class="card">
                 <h3>Update Your Information</h3>
@@ -397,6 +408,7 @@
                     </select>
                 </div>
 
+                <!-- DYNAMIC TEAM SELECTOR (Hidden by Default) -->
                 <div id="manual-team-setup" class="hidden card"
                     style="background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.05); padding: 15px; margin: 15px 0;">
                     <h4 style="color:var(--primary); margin-bottom: 5px;">Build Your Team</h4>
@@ -460,21 +472,16 @@
 
         <div id="tab-search" class="main-tab-content hidden">
             <div class="tab-bar sub-tabs">
-                <!-- Removed 'active' from AI Recos -->
                 <button class="sub-btn" onclick="showSubTab('sub-recos', this); window.fetchAIRecos();">AI
                     Recos</button>
-                <button class="sub-btn" onclick="showSubTab('sub-name-search', this)">Name Search</button>
+                <button class="sub-btn active" id="btn-sub-member-search"
+                    onclick="showSubTab('sub-member-search', this)">Member Search</button>
                 <button class="sub-btn" onclick="showSubTab('sub-random', this)">Random</button>
-
-                <!-- NEW: Added 'active' and ID to All Open -->
-                <button class="sub-btn active" id="btn-sub-all" onclick="showSubTab('sub-all', this)">All Open</button>
-
                 <button class="sub-btn" onclick="showSubTab('sub-received', this)">Received <span id="nav-red-dot"
                         class="red-dot hidden">•</span></button>
                 <button class="sub-btn" onclick="showSubTab('sub-sent', this)">Sent</button>
             </div>
 
-            <!-- NEW: Added 'hidden' to sub-recos -->
             <div id="sub-recos" class="sub-tab-content hidden">
                 <div class="flex-between" style="margin-bottom: 20px;">
                     <div>
@@ -487,26 +494,54 @@
                 </div>
             </div>
 
-            <div id="sub-name-search" class="sub-tab-content hidden">
-                <h3>Search by Name</h3>
-                <div class="form-group">
-                    <input type="text" id="global-name-search" placeholder="Type a name or username to search..."
-                        autocomplete="off">
+            <!-- NEW: Universal Member Search Tab -->
+            <div id="sub-member-search" class="sub-tab-content">
+                <div class="card" style="padding: 15px; margin-bottom: 20px; background: rgba(0,0,0,0.2);">
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <input type="text" id="filter-name" placeholder="Search by name or username..."
+                            autocomplete="off">
+                    </div>
+                    <div class="filter-grid">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Experience</label><select id="filter-exp">
+                                <option value="Any">Any</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>City</label><select id="filter-city">
+                                <option value="Any">Any</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Background</label><select id="filter-background">
+                                <option value="Any">Any</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Work Domain</label><select id="filter-work">
+                                <option value="Any">Any</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Project Domain</label><select id="filter-project">
+                                <option value="Any">Any</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Status</label><select id="filter-status">
+                                <option value="Any">Any</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
-                <div id="name-search-results">
-                    <p class="text-muted">Type at least 2 characters to search active members.</p>
+                <div id="member-search-results">
+                    <p class="text-muted">Loading members...</p>
                 </div>
             </div>
 
             <div id="sub-random" class="sub-tab-content hidden">
                 <h3>Random Matches</h3>
                 <div id="random-results"></div>
-            </div>
-
-            <!-- NEW: Removed 'hidden' from sub-all -->
-            <div id="sub-all" class="sub-tab-content">
-                <h3>All Open Members</h3>
-                <div id="all-results"></div>
             </div>
 
             <div id="sub-received" class="sub-tab-content hidden">
@@ -537,18 +572,15 @@
                 <button id="btn-admin-random" class="btn btn-danger">Generate Random Round for All</button>
                 <hr style="border-color: rgba(255,255,255,0.1); margin: 24px 0;">
                 <h4 style="color: var(--primary);">Platform Settings (Firestore: settings/config)</h4>
-
                 <div class="form-group" style="margin-top: 15px; max-width: 200px;">
                     <label>Max Members per Group</label>
                     <input type="number" id="admin-max-members" value="2" min="2">
                 </div>
-
                 <div class="form-group" style="margin-top: 15px; margin-bottom: 25px;">
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         <input type="checkbox" id="admin-register-allowed" style="width: auto;"> Allow New Registrations
                     </label>
                 </div>
-
                 <button id="btn-save-settings" class="btn btn-outline" style="width: auto;">Save Settings</button>
             </div>
         </div>

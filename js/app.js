@@ -20,7 +20,7 @@ let currentUserProfile = null;
 let platformSettings = { maxMembers: 2, register_allowed: true };
 let hasLoadedRecos = false;
 
-let cachedOpenMembers = [];
+let cachedAllMembers = [];
 let manualTeamSelection = [];
 
 function showToast(message, type = "success") {
@@ -64,12 +64,9 @@ async function loadAutocomplete() {
     });
 }
 
-// Fetch global settings and dynamically update UI
 async function loadPlatformSettings() {
     const snap = await getDoc(doc(db, "settings", "config"));
-    if (snap.exists()) {
-        platformSettings = snap.data();
-    }
+    if (snap.exists()) platformSettings = snap.data();
 
     if (platformSettings.register_allowed === undefined) platformSettings.register_allowed = true;
 
@@ -224,10 +221,9 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         }
 
-        // --- NEW LOGIC: Make Search Tab available to everyone (Open, Solo, Teamed Up) ---
+        // Search tab is always visible now
         document.getElementById("nav-search").classList.remove("hidden");
 
-        // Load underlying data for the Search tab universally
         await loadAllMembers();
         loadInterests();
         fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
@@ -238,7 +234,6 @@ async function loadUserProfile(uid) {
             fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
         }
 
-        // --- NEW LOGIC: Restrict AI Reco specifically ---
         if (currentUserProfile.status !== "open") {
             document.getElementById("reco-results").innerHTML = "<p class='text-muted' style='color: var(--danger); font-weight: 500;'>Available only for status Open.</p>";
             const refreshBtn = document.getElementById("btn-get-reco");
@@ -267,18 +262,68 @@ function populateProfileForm(data) {
     document.getElementById("edit_status").value = data.status || "open";
 }
 
-document.getElementById("global-name-search").addEventListener("input", (e) => {
-    const val = e.target.value.toLowerCase().trim();
-    const container = document.getElementById("name-search-results");
-    if (val.length < 2) {
-        container.innerHTML = "<p class='text-muted'>Type at least 2 characters to search active members.</p>";
-        return;
+// --- NEW LOGIC: Dynamic Filter Population and Execution ---
+function populateFilterDropdowns() {
+    const exps = new Set(), cities = new Set(), backgrounds = new Set();
+    const workDomains = new Set(), projDomains = new Set(), statuses = new Set();
+
+    cachedAllMembers.forEach(u => {
+        if (u.exp) exps.add(u.exp);
+        if (u.city) cities.add(u.city);
+        if (u.background) backgrounds.add(u.background);
+        if (u.current_domain) workDomains.add(u.current_domain);
+        if (u.project_domain) projDomains.add(u.project_domain);
+        if (u.status) statuses.add(u.status);
+    });
+
+    const fillSelect = (id, set) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = '<option value="Any">Any</option>';
+        Array.from(set).filter(Boolean).sort().forEach(val => {
+            el.innerHTML += `<option value="${val}">${val}</option>`;
+        });
+    };
+
+    fillSelect('filter-exp', exps);
+    fillSelect('filter-city', cities);
+    fillSelect('filter-background', backgrounds);
+    fillSelect('filter-work', workDomains);
+    fillSelect('filter-project', projDomains);
+    fillSelect('filter-status', statuses);
+}
+
+function executeMemberSearch() {
+    const nameVal = document.getElementById('filter-name').value.toLowerCase().trim();
+    const expVal = document.getElementById('filter-exp').value;
+    const cityVal = document.getElementById('filter-city').value;
+    const bgVal = document.getElementById('filter-background').value;
+    const workVal = document.getElementById('filter-work').value;
+    const projVal = document.getElementById('filter-project').value;
+    const statusVal = document.getElementById('filter-status').value;
+
+    const filtered = cachedAllMembers.filter(u => {
+        if (nameVal && !(u.name.toLowerCase().includes(nameVal) || (u.username && u.username.toLowerCase().includes(nameVal)))) return false;
+        if (expVal !== "Any" && u.exp !== expVal) return false;
+        if (cityVal !== "Any" && u.city !== cityVal) return false;
+        if (bgVal !== "Any" && u.background !== bgVal) return false;
+        if (workVal !== "Any" && u.current_domain !== workVal) return false;
+        if (projVal !== "Any" && u.project_domain !== projVal) return false;
+        if (statusVal !== "Any" && u.status !== statusVal) return false;
+        return true;
+    });
+
+    renderUserCards(filtered, "member-search-results", true);
+}
+
+// Bind all filter inputs to trigger the search instantly
+['filter-name', 'filter-exp', 'filter-city', 'filter-background', 'filter-work', 'filter-project', 'filter-status'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener(id === 'filter-name' ? 'input' : 'change', executeMemberSearch);
     }
-    const filtered = cachedOpenMembers.filter(u =>
-        u.name.toLowerCase().includes(val) || (u.username && u.username.toLowerCase().includes(val))
-    );
-    renderUserCards(filtered, "name-search-results", true);
 });
+
 
 document.getElementById("edit_status").addEventListener("change", (e) => {
     const val = e.target.value;
@@ -300,8 +345,12 @@ document.getElementById("profile-team-search").addEventListener("input", (e) => 
         dropdown.innerHTML = "";
         return;
     }
-    const filtered = cachedOpenMembers.filter(u =>
-        u.name.toLowerCase().includes(val) && !manualTeamSelection.some(m => m.uid === u.uid)
+
+    // Ensure only "open" members can be manually added to teams
+    const filtered = cachedAllMembers.filter(u =>
+        u.status === "open" &&
+        u.name.toLowerCase().includes(val) &&
+        !manualTeamSelection.some(m => m.uid === u.uid)
     ).slice(0, 5);
 
     let html = "";
@@ -318,7 +367,7 @@ window.addManualTeamMember = (uid) => {
     if (manualTeamSelection.length >= platformSettings.maxMembers - 1) {
         return showToast(`Max team size is ${platformSettings.maxMembers} (You + ${platformSettings.maxMembers - 1} members).`, "error");
     }
-    const user = cachedOpenMembers.find(u => u.uid === uid);
+    const user = cachedAllMembers.find(u => u.uid === uid);
     if (user) {
         manualTeamSelection.push(user);
         document.getElementById("profile-team-search").value = "";
@@ -505,8 +554,12 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Request Pending</button>`;
             } else if (rejectedInterests.includes(u.id)) {
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.5; border-color: rgba(244,63,94,0.4); color: var(--danger); cursor: not-allowed;">Rejected</button>`;
-            } else {
+            } else if (u.status === "open") {
+                // Ensure send interest button is ONLY available if the target is still "open"
                 actionButtons = `<button class="btn btn-outline" id="btn-send-${u.id}" onclick="sendInterest('${u.id}')">Send Interest</button>`;
+            } else {
+                // Member is Solo or Teamed Up, do not show interest button
+                actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Unavailable</button>`;
             }
         } else if (isSentTab) {
             actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Waiting for reply...</button>`;
@@ -523,8 +576,11 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
             socialsHtml += `</div>`;
         }
 
+        let statusBadgeColor = u.status === 'open' ? 'var(--success)' : (u.status === 'solo' ? '#f59e0b' : '#3b82f6');
+        let statusBadge = `<span class="badge" style="background-color: ${statusBadgeColor}20; color: ${statusBadgeColor};">${u.status.toUpperCase().replace('_', ' ')}</span>`;
+
         html += `<div class="card user-card">
-            <h4>${u.name} <span class="badge">${u.city || 'No City'}</span></h4>
+            <h4>${u.name} <span class="badge">${u.city || 'No City'}</span> ${statusBadge}</h4>
             <div class="user-card-meta">
                 <div><strong style="color:var(--primary)">Exp:</strong> ${u.exp}</div>
                 <div><strong style="color:var(--primary)">Work Domain:</strong> ${u.current_domain}</div>
@@ -562,9 +618,9 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
+// Fetches ALL users (not just open) into cache to allow comprehensive filtering
 async function loadAllMembers() {
-    document.getElementById("all-results").innerHTML = "<p class='text-muted'>Loading open members...</p>";
-    const q = query(collection(db, "users"), where("status", "==", "open"));
+    const q = query(collection(db, "users"));
     const querySnapshot = await getDocs(q);
     let allUsers = [];
     querySnapshot.forEach(d => {
@@ -572,11 +628,12 @@ async function loadAllMembers() {
             allUsers.push({ id: d.id, uid: d.id, ...d.data() });
         }
     });
-    cachedOpenMembers = allUsers;
-    renderUserCards(allUsers, "all-results", true);
+    cachedAllMembers = allUsers;
+
+    populateFilterDropdowns();
+    executeMemberSearch(); // Renders initial list based on default "Any" filters
 }
 
-// --- NEW LOGIC: Simplified Group Rendering ---
 window.loadAllProjects = async () => {
     const container = document.getElementById("projects-results");
     container.innerHTML = "<p class='text-muted'>Loading projects...</p>";
@@ -642,7 +699,6 @@ window.fetchAIRecos = async (forceRefresh = false) => {
 
     const recoContainer = document.getElementById("reco-results");
 
-    // --- NEW LOGIC: Final guard check for AI Reco Execution ---
     if (currentUserProfile.status !== "open") {
         recoContainer.innerHTML = "<p class='text-muted' style='color: var(--danger); font-weight: 500;'>Available only for status Open.</p>";
         document.getElementById("btn-get-reco").classList.add("hidden");
