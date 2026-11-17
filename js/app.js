@@ -224,24 +224,31 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         }
 
-        if (currentUserProfile.status === "teamed_up" || currentUserProfile.status === "solo") {
-            document.getElementById("nav-search").classList.add("hidden");
+        // --- NEW LOGIC: Make Search Tab available to everyone (Open, Solo, Teamed Up) ---
+        document.getElementById("nav-search").classList.remove("hidden");
+
+        // Load underlying data for the Search tab universally
+        await loadAllMembers();
+        loadInterests();
+        fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
+
+        if (currentUserProfile.random_matches.length === 0) {
+            document.getElementById("random-results").innerHTML = "<p class='text-muted'>Wait for admin for random matches.</p>";
         } else {
-            document.getElementById("nav-search").classList.remove("hidden");
-
-            await loadAllMembers();
-            loadInterests();
-            fetchAndRenderUsers(currentUserProfile.interests_sent, "sent-results", false, false, true);
-
-            if (currentUserProfile.random_matches.length === 0) {
-                document.getElementById("random-results").innerHTML = "<p class='text-muted'>Wait for admin for random matches.</p>";
-            } else {
-                fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
-            }
-
-            // NOTE: fetchAIRecos() is purposefully excluded here to prevent execution on load.
-            // It will trigger dynamically when the user clicks the AI Recos sub-tab in index.html
+            fetchAndRenderUsers(currentUserProfile.random_matches, "random-results", true);
         }
+
+        // --- NEW LOGIC: Restrict AI Reco specifically ---
+        if (currentUserProfile.status !== "open") {
+            document.getElementById("reco-results").innerHTML = "<p class='text-muted' style='color: var(--danger); font-weight: 500;'>Available only for status Open.</p>";
+            const refreshBtn = document.getElementById("btn-get-reco");
+            if (refreshBtn) refreshBtn.classList.add("hidden");
+        } else {
+            document.getElementById("reco-results").innerHTML = "<p class='text-muted'>Click 'Refresh Matches' to query the AI.</p>";
+            const refreshBtn = document.getElementById("btn-get-reco");
+            if (refreshBtn) refreshBtn.classList.remove("hidden");
+        }
+
         window.loadAllProjects();
     } catch (error) { console.error(error); showToast("Failed to load user data.", "error"); }
 }
@@ -436,7 +443,6 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
             }
         }
 
-        // Send a single, definitive webhook payload for the current user
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: currentUserProfile.uid, combinedText: generateEmbeddingText(updatedData), status: updatedData.status })
@@ -552,9 +558,7 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
         } catch (error) { console.warn("Skipping chunk:", chunk); }
     }
 
-    // Sort array dynamically to perfectly preserve Qdrant's Highest-to-Lowest Score Order
     allUsers.sort((a, b) => uidArray.indexOf(a.id) - uidArray.indexOf(b.id));
-
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
@@ -572,13 +576,12 @@ async function loadAllMembers() {
     renderUserCards(allUsers, "all-results", true);
 }
 
+// --- NEW LOGIC: Simplified Group Rendering ---
 window.loadAllProjects = async () => {
     const container = document.getElementById("projects-results");
     container.innerHTML = "<p class='text-muted'>Loading projects...</p>";
     const snap = await getDocs(collection(db, "projects"));
     let html = "";
-
-    // Keep track of the group index for simple sequential numbering
     let groupCounter = 1;
 
     snap.forEach(docSnap => {
@@ -600,7 +603,6 @@ window.loadAllProjects = async () => {
             `;
         }
 
-        // Project Card Output: Simple, Multiline, no 'Solo'/'Team' labels
         html += `<div class="card" style="border-left: 4px solid var(--primary);">
             <h4 style="color:var(--primary); margin-bottom: 5px;">Group ${groupCounter}</h4>
             <p style="margin: 5px 0 15px;"><strong>Members:</strong> ${memberNamesStr}</p>
@@ -610,7 +612,6 @@ window.loadAllProjects = async () => {
                 ${editHtml}
             </div>
         </div>`;
-
         groupCounter++;
     });
 
@@ -637,9 +638,17 @@ window.saveProjectIdea = async (projectId) => {
 
 window.fetchAIRecos = async (forceRefresh = false) => {
     if (hasLoadedRecos && !forceRefresh) return;
-    if (!currentUserProfile || currentUserProfile.status !== "open") return;
+    if (!currentUserProfile) return;
 
     const recoContainer = document.getElementById("reco-results");
+
+    // --- NEW LOGIC: Final guard check for AI Reco Execution ---
+    if (currentUserProfile.status !== "open") {
+        recoContainer.innerHTML = "<p class='text-muted' style='color: var(--danger); font-weight: 500;'>Available only for status Open.</p>";
+        document.getElementById("btn-get-reco").classList.add("hidden");
+        return;
+    }
+
     recoContainer.innerHTML = "<p class='text-muted'>Scanning vector database...</p>";
 
     try {
@@ -669,7 +678,6 @@ window.fetchAIRecos = async (forceRefresh = false) => {
             return;
         }
 
-        // Qdrant scores determine array order, which is passed into the rendering function
         fetchAndRenderUsers(finalUidsArray.slice(0, 5), "reco-results", true);
         hasLoadedRecos = true;
 
