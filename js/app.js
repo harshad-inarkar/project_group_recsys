@@ -578,6 +578,9 @@ window.loadAllProjects = async () => {
     const snap = await getDocs(collection(db, "projects"));
     let html = "";
 
+    // Keep track of the group index for simple sequential numbering
+    let groupCounter = 1;
+
     snap.forEach(docSnap => {
         const p = docSnap.data();
         const projectId = docSnap.id;
@@ -590,22 +593,25 @@ window.loadAllProjects = async () => {
         if (isMyProject) {
             editHtml = `
                 <div style="margin-top:12px;">
-                    <textarea id="edit-proj-${projectId}" class="hidden" rows="3" style="width:100%; margin-bottom:10px;">${p.project_desc}</textarea>
+                    <textarea id="edit-proj-${projectId}" class="hidden" rows="4" style="width:100%; margin-bottom:10px; font-family: inherit; resize: vertical;">${p.project_desc}</textarea>
                     <button id="btn-edit-${projectId}" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.8rem; width: auto;" onclick="toggleEditProject('${projectId}')">Edit Idea</button>
                     <button id="btn-save-${projectId}" class="btn btn-primary hidden" style="padding: 4px 10px; font-size: 0.8rem; width: auto;" onclick="saveProjectIdea('${projectId}')">Save Idea</button>
                 </div>
             `;
         }
 
+        // Project Card Output: Simple, Multiline, no 'Solo'/'Team' labels
         html += `<div class="card" style="border-left: 4px solid var(--primary);">
-            <h4 style="color:var(--primary);">${p.type === 'team' ? '🤝 Team' : '👤 Solo Project'}</h4>
-            <p style="margin: 5px 0 10px;"><strong>Members:</strong> ${memberNamesStr}</p>
+            <h4 style="color:var(--primary); margin-bottom: 5px;">Group ${groupCounter}</h4>
+            <p style="margin: 5px 0 15px;"><strong>Members:</strong> ${memberNamesStr}</p>
             <div style="background:rgba(0,0,0,0.2); padding:12px; border-radius:6px; border:1px solid rgba(255,255,255,0.05);">
                 <strong style="color:var(--primary); font-size:0.875rem;">Final Project Idea:</strong><br/> 
-                <span id="text-proj-${projectId}" style="font-size:0.95rem; display:block; margin-top:5px;">${p.project_desc}</span>
+                <span id="text-proj-${projectId}" style="font-size:0.95rem; display:block; margin-top:5px; white-space: pre-wrap;">${p.project_desc}</span>
                 ${editHtml}
             </div>
         </div>`;
+
+        groupCounter++;
     });
 
     if (html === "") html = "<p class='text-muted'>No projects finalized yet.</p>";
