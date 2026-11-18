@@ -313,6 +313,14 @@ function executeMemberSearch() {
         return true;
     });
 
+    // --- NEW: Sort by Project Idea OR Project Domain presence ---
+    // Users with either a populated project_desc or project_domain float to the top
+    filtered.sort((a, b) => {
+        const aHasProjectInfo = ((a.project_desc && a.project_desc.trim() !== "") || (a.project_domain && a.project_domain.trim() !== "")) ? 1 : 0;
+        const bHasProjectInfo = ((b.project_desc && b.project_desc.trim() !== "") || (b.project_domain && b.project_domain.trim() !== "")) ? 1 : 0;
+        return bHasProjectInfo - aHasProjectInfo;
+    });
+
     renderUserCards(filtered, "member-search-results", true);
 }
 
