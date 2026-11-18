@@ -1,5 +1,5 @@
 {
-  "name": "project_group_recsys_qdrant_final",
+  "name": "project_group_recsys_qdrant",
   "nodes": [
     {
       "parameters": {
@@ -8,13 +8,13 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "992698e0-b4db-4cc0-a6e7-c872286e0744",
+      "id": "dced4d62-2cd7-4e49-bc63-2cdafa220785",
       "name": "Webhook: Embed Profile",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        864,
-        -1056
+        32,
+        0
       ],
       "webhookId": "4720aea0-91b4-40bf-a579-f4e8f610d6bc"
     },
@@ -29,17 +29,17 @@
         "jsonBody": "{\"field_name\":\"metadata.uid\",\"field_schema\":\"keyword\"}",
         "options": {}
       },
-      "id": "bd3a86af-d6b9-41bc-a797-91cbd869ddfc",
+      "id": "b367d7f4-7110-4f43-b08b-5071e2740f4a",
       "name": "Ensure UID Index (HTTP)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        1088,
-        -1056
+        256,
+        0
       ],
       "credentials": {
         "qdrantApi": {
-          "id": "nPoDn3MiZxMDe89q",
+          "id": "zlB4xqKhJQgRkvgX",
           "name": "Qdrant account"
         }
       }
@@ -55,17 +55,17 @@
         "jsonBody": "={\n  \"filter\": {\n    \"must\": [\n      {\n        \"key\": \"metadata.uid\",\n        \"match\": {\n          \"value\": \"{{ $('Webhook: Embed Profile').item.json.body.uid }}\"\n        }\n      }\n    ]\n  }\n}",
         "options": {}
       },
-      "id": "998014b2-b627-4cab-88fd-fad6fac6026f",
+      "id": "710d0bd6-f6c8-488a-972f-dc34f8e50b82",
       "name": "Delete Old Vector (HTTP)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        1312,
-        -1056
+        480,
+        0
       ],
       "credentials": {
         "qdrantApi": {
-          "id": "nPoDn3MiZxMDe89q",
+          "id": "zlB4xqKhJQgRkvgX",
           "name": "Qdrant account"
         }
       },
@@ -75,13 +75,13 @@
       "parameters": {
         "jsCode": "const text = $('Webhook: Embed Profile').item.json.body.combinedText;\nreturn [{ json: { profile_data: text } }];"
       },
-      "id": "4d2fb17e-0b16-4568-a981-42ab043bedd6",
+      "id": "400bbbf3-2857-4838-af8d-557d361ab0aa",
       "name": "Format Text for Loader",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1504,
-        -1056
+        672,
+        0
       ]
     },
     {
@@ -95,35 +95,38 @@
         },
         "options": {}
       },
-      "id": "aba06fa7-206e-49e1-bac8-fe229651f73f",
+      "id": "1a747676-13ec-49b3-a3b9-f23277164f54",
       "name": "Qdrant Vector Store",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
       "position": [
-        1760,
-        -1056
+        928,
+        0
       ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
       "credentials": {
         "qdrantApi": {
-          "id": "nPoDn3MiZxMDe89q",
+          "id": "zlB4xqKhJQgRkvgX",
           "name": "Qdrant account"
         }
       }
     },
     {
       "parameters": {},
-      "id": "07bc74a5-d53a-4843-8052-3df7b94b4ad3",
+      "id": "be2da133-8d22-447b-9f6e-3e98b4e7320f",
       "name": "Google Gemini Embeddings",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1760,
-        -848
+        928,
+        208
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "UUzxMttUkKXfrMSe",
-          "name": "Google Gemini(PaLM) Api account"
+          "id": "ZSsDg2EFpslTf84z",
+          "name": "Google Gemini(PaLM) Api account 2"
         }
       }
     },
@@ -144,13 +147,13 @@
           }
         }
       },
-      "id": "6da51700-61a3-4391-bfdd-9f638b9374c9",
+      "id": "40971b37-7ccc-40bb-9049-7fa6155e643d",
       "name": "Default Data Loader",
       "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
       "typeVersion": 1,
       "position": [
-        2016,
-        -944
+        1184,
+        112
       ]
     },
     {
@@ -158,13 +161,13 @@
         "chunkOverlap": 100,
         "options": {}
       },
-      "id": "322d271e-2cea-41e9-ac40-689f21dd87a7",
+      "id": "a194e4d1-b8a3-4cd5-85fa-3e761f58473f",
       "name": "Recursive Character Text Splitter",
       "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
       "typeVersion": 1,
       "position": [
-        2336,
-        -848
+        1504,
+        208
       ]
     },
     {
@@ -174,13 +177,13 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "a228d88d-06de-4901-a08f-cce70d208247",
+      "id": "a600d35a-5356-43b7-a560-a51c429a6254",
       "name": "Webhook: Get Reco",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        832,
-        -608
+        0,
+        448
       ],
       "webhookId": "c17956d2-8145-4d32-8b9f-837b9461efd7"
     },
@@ -197,35 +200,38 @@
         "topK": 6,
         "options": {}
       },
-      "id": "adefb272-f405-45bd-96d7-ff3e4c993c09",
+      "id": "cd2b30c0-582e-4869-879f-592d64eb4f31",
       "name": "Qdrant Vector Store Search1",
       "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
       "typeVersion": 1,
       "position": [
-        1136,
-        -608
+        304,
+        448
       ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
       "credentials": {
         "qdrantApi": {
-          "id": "nPoDn3MiZxMDe89q",
+          "id": "zlB4xqKhJQgRkvgX",
           "name": "Qdrant account"
         }
       }
     },
     {
       "parameters": {},
-      "id": "cde64029-343f-4b81-8702-9214e82f3dca",
+      "id": "4a4d3b0f-a18b-4d26-8626-48b57679706d",
       "name": "Google Gemini Embeddings2",
       "type": "@n8n/n8n-nodes-langchain.embeddingsGoogleGemini",
       "typeVersion": 1,
       "position": [
-        1136,
-        -400
+        304,
+        656
       ],
       "credentials": {
         "googlePalmApi": {
-          "id": "UUzxMttUkKXfrMSe",
-          "name": "Google Gemini(PaLM) Api account"
+          "id": "ZSsDg2EFpslTf84z",
+          "name": "Google Gemini(PaLM) Api account 2"
         }
       }
     },
@@ -233,13 +239,13 @@
       "parameters": {
         "jsCode": "const requestingUid = $('Webhook: Get Reco').item.json.body.uid;\nconst documents = $input.all();\n\n// LangChain wraps metadata inside the doc payload\nconst uids = documents\n  .map(doc => (doc.json.document?.metadata?.uid ?? doc.json.metadata?.uid))\n  .filter((uid, i, arr) => uid && uid !== requestingUid && arr.indexOf(uid) === i)\n  .slice(0, 5);\n\nreturn [{ json: { uids } }];"
       },
-      "id": "fcfffd19-4253-411c-9ded-476cb369fa5d",
+      "id": "298a61dd-aef8-4f41-8e2b-99e7145ed593",
       "name": "Code: Filter Self",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1488,
-        -608
+        656,
+        448
       ]
     },
     {
@@ -248,13 +254,13 @@
         "responseBody": "={{ $json.uids }}",
         "options": {}
       },
-      "id": "a56cb5d2-271f-40a3-90dd-72c2e417b35c",
+      "id": "338fadfc-b216-4c25-a7cb-d76aba908157",
       "name": "Respond to Webhook1",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        1728,
-        -608
+        896,
+        448
       ]
     }
   ],
@@ -387,12 +393,12 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "98fcd28d-153d-4787-bc7b-703a6ad54d0e",
+  "versionId": "5d17372e-5c65-4c9b-86bc-d22115373ba0",
   "meta": {
     "templateCredsSetupCompleted": true,
-    "instanceId": "269ed35f1860be28360b77af23e6b2d0530ae2ff28f06c80c4cea5bc0e1becf0"
+    "instanceId": "60a2f772e2c2a09b7c185384519c7c134d398ac8b6d10a4fff153ad0757af506"
   },
   "nodeGroups": [],
-  "id": "agcNXfkk3dYE83Yj",
+  "id": "rpCMSY3j30kxwvE7",
   "tags": []
 }
