@@ -330,7 +330,7 @@
         <h2 style="text-align: center; margin-bottom: 24px;">Project Group RecSys</h2>
         <div class="form-group">
             <label for="login_identifier">Name or Username <span style="color:var(--danger)">*</span></label>
-            <input type="text" id="login_identifier" list="user-list" placeholder="Search your name..."
+            <input type="text" id="login_identifier" list="user-list" placeholder="Enter your username or name..."
                 autocomplete="off">
             <datalist id="user-list"></datalist>
         </div>
@@ -346,6 +346,7 @@
         <div id="register-fields" class="hidden"
             style="margin-top: 30px; border-top: 1px solid var(--border); padding-top: 24px;">
             <h3 style="color: var(--primary);">Registration Details</h3>
+            <p class="text-muted" style="margin-bottom: 15px;">Password must be at least 6 characters.</p>
             <div class="form-group"><label for="exp">Experience</label>
                 <select id="exp">
                     <option value="1+">1+</option>
@@ -461,8 +462,8 @@
                 <h4 style="color: var(--primary);">Change Password</h4>
                 <div class="form-group"><label>Current Password</label><input type="password" id="current_password"
                         placeholder="••••••••"></div>
-                <div class="form-group"><label>New Password</label><input type="password" id="new_password"
-                        placeholder="••••••••"></div>
+                <div class="form-group"><label>New Password (min 6 chars)</label><input type="password"
+                        id="new_password" placeholder="••••••••"></div>
                 <div class="form-group"><label>Confirm New Password</label><input type="password" id="confirm_password"
                         placeholder="••••••••"></div>
                 <button id="btn-change-password" class="btn btn-outline" style="width: auto; margin-top: 10px;">Update
@@ -494,7 +495,7 @@
                 </div>
             </div>
 
-            <!-- NEW: Universal Member Search Tab -->
+            <!-- Universal Member Search Tab -->
             <div id="sub-member-search" class="sub-tab-content">
                 <div class="card" style="padding: 15px; margin-bottom: 20px; background: rgba(0,0,0,0.2);">
                     <div class="form-group" style="margin-bottom: 12px;">
@@ -576,9 +577,15 @@
                     <label>Max Members per Group</label>
                     <input type="number" id="admin-max-members" value="2" min="2">
                 </div>
-                <div class="form-group" style="margin-top: 15px; margin-bottom: 25px;">
+                <div class="form-group" style="margin-top: 15px;">
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         <input type="checkbox" id="admin-register-allowed" style="width: auto;"> Allow New Registrations
+                    </label>
+                </div>
+                <div class="form-group" style="margin-top: 10px; margin-bottom: 25px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="admin-load-autocomplete" style="width: auto;" checked> Load
+                        Autocomplete Pre-Login
                     </label>
                 </div>
                 <button id="btn-save-settings" class="btn btn-outline" style="width: auto;">Save Settings</button>

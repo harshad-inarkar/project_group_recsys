@@ -1,5 +1,29 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, arrayUnion, arrayRemove, collection, query, where, documentId } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+    getAuth,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updatePassword,
+    EmailAuthProvider,
+    reauthenticateWithCredential
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import {
+    getFirestore,
+    doc,
+    setDoc,
+    getDoc,
+    getDocs,
+    updateDoc,
+    deleteDoc,
+    arrayUnion,
+    arrayRemove,
+    collection,
+    query,
+    where,
+    documentId
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCmrY4OLmNdTFS_jBQdzAKMMtARAegB5kw",
@@ -11,17 +35,25 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
 
+const SYNTHETIC_DOMAIN = "recsys.local";
 const WEBHOOK_EMBED_PROFILE = "https://harshad-dev-rag.app.n8n.cloud/webhook/embed-profile";
 const WEBHOOK_GET_RECO = "https://harshad-dev-rag.app.n8n.cloud/webhook/get-recommendations";
 
 let currentUserProfile = null;
-let platformSettings = { maxMembers: 2, register_allowed: true };
+let platformSettings = {
+    maxMembers: 2,
+    register_allowed: true,
+    load_autocomplete_prelogin: true
+};
 let hasLoadedRecos = false;
+let isRegistering = false;
 
 let cachedAllMembers = [];
 let manualTeamSelection = [];
+let directoryNameToUsername = new Map();
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -42,33 +74,75 @@ function generateEmbeddingText(u) {
     return `Primary Project Focus: ${idea}. Target Project Domain: ${projDomain}. Industry Expertise: ${workDomain}. Professional Background: ${bg}. Location: ${city}. Experience Level: ${exp}.`;
 }
 
-async function hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 function cleanName(name) {
     return name.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, '_').replace(/^_|_$/g, '');
 }
 
+function toSyntheticEmail(username) {
+    return `${username.trim().toLowerCase()}@${SYNTHETIC_DOMAIN}`;
+}
+
 async function loadAutocomplete() {
-    const snap = await getDocs(collection(db, "users"));
     const datalist = document.getElementById("user-list");
     datalist.innerHTML = "";
-    snap.forEach(docSnap => {
-        const u = docSnap.data();
-        datalist.innerHTML += `<option value="${u.username}">${u.name}</option>`;
-    });
+    directoryNameToUsername.clear();
+
+    if (!platformSettings.load_autocomplete_prelogin) return;
+
+    try {
+        const snap = await getDocs(collection(db, "user_directory"));
+        snap.forEach(docSnap => {
+            const u = docSnap.data();
+            if (u.username) {
+                datalist.innerHTML += `<option value="${u.username}">${u.name || u.username}</option>`;
+                if (u.name) {
+                    directoryNameToUsername.set(u.name.toLowerCase(), u.username.toLowerCase());
+                }
+            }
+        });
+    } catch (e) {
+        console.warn("Could not load pre-login autocomplete:", e);
+    }
+}
+
+async function resolveUsernameFromIdentifier(identifier) {
+    const trimmed = identifier.trim();
+    const lower = trimmed.toLowerCase();
+
+    // 1. Check cached autocomplete map (if pre-loaded)
+    if (directoryNameToUsername.has(lower)) {
+        return directoryNameToUsername.get(lower);
+    }
+
+    // 2. If user typed a Full Name (contains space or uppercase), look it up in user_directory
+    if (trimmed.includes(" ") || trimmed !== lower) {
+        try {
+            const qName = query(collection(db, "user_directory"), where("name", "==", trimmed));
+            const snap = await getDocs(qName);
+            if (!snap.empty) {
+                return snap.docs[0].data().username.toLowerCase();
+            }
+        } catch (e) {
+            console.warn("Directory name lookup failed, falling back to cleaned username.");
+        }
+    }
+
+    // 3. Treat directly as username
+    return cleanName(trimmed);
 }
 
 async function loadPlatformSettings() {
-    const snap = await getDoc(doc(db, "settings", "config"));
-    if (snap.exists()) platformSettings = snap.data();
+    try {
+        const snap = await getDoc(doc(db, "settings", "config"));
+        if (snap.exists()) {
+            platformSettings = { ...platformSettings, ...snap.data() };
+        }
+    } catch (e) {
+        console.warn("Failed to load platform settings, using defaults:", e);
+    }
 
     if (platformSettings.register_allowed === undefined) platformSettings.register_allowed = true;
+    if (platformSettings.load_autocomplete_prelogin === undefined) platformSettings.load_autocomplete_prelogin = true;
 
     const regButton = document.getElementById("btn-toggle-register");
     if (platformSettings.register_allowed) {
@@ -80,38 +154,66 @@ async function loadPlatformSettings() {
 
     const adminMax = document.getElementById("admin-max-members");
     const adminReg = document.getElementById("admin-register-allowed");
+    const adminAuto = document.getElementById("admin-load-autocomplete");
     if (adminMax) adminMax.value = platformSettings.maxMembers || 2;
     if (adminReg) adminReg.checked = platformSettings.register_allowed;
+    if (adminAuto) adminAuto.checked = platformSettings.load_autocomplete_prelogin;
 }
 
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
     const max = parseInt(document.getElementById("admin-max-members").value);
     const isAllowed = document.getElementById("admin-register-allowed").checked;
+    const loadAuto = document.getElementById("admin-load-autocomplete").checked;
 
-    await setDoc(doc(db, "settings", "config"), { maxMembers: max, register_allowed: isAllowed }, { merge: true });
+    try {
+        await setDoc(
+            doc(db, "settings", "config"),
+            {
+                maxMembers: max,
+                register_allowed: isAllowed,
+                load_autocomplete_prelogin: loadAuto
+            },
+            { merge: true }
+        );
 
-    platformSettings.maxMembers = max;
-    platformSettings.register_allowed = isAllowed;
+        platformSettings.maxMembers = max;
+        platformSettings.register_allowed = isAllowed;
+        platformSettings.load_autocomplete_prelogin = loadAuto;
 
-    showToast("Platform Settings Saved!");
+        showToast("Platform Settings Saved!");
+    } catch (e) {
+        showToast("Failed to save settings: " + e.message, "error");
+    }
 });
 
+// Initialize settings + Firebase Auth session listener
 document.addEventListener("DOMContentLoaded", async () => {
     await loadPlatformSettings();
     await loadAutocomplete();
 
-    const savedSession = localStorage.getItem("loggedInUser");
-    if (savedSession) {
-        document.getElementById("auth-section").classList.add("hidden");
-        document.getElementById("app-section").classList.remove("hidden");
-        document.getElementById("welcome-msg").innerText = "Loading profile data...";
-        await loadUserProfile(savedSession);
-    }
+    onAuthStateChanged(auth, async (user) => {
+        if (isRegistering) return; // Wait until registration finishes writing Firestore profile
+
+        if (user) {
+            document.getElementById("auth-section").classList.add("hidden");
+            document.getElementById("app-section").classList.remove("hidden");
+            document.getElementById("welcome-msg").innerText = "Loading profile data...";
+            await loadUserProfile(user.uid);
+        } else {
+            currentUserProfile = null;
+            document.getElementById("app-section").classList.add("hidden");
+            document.getElementById("auth-section").classList.remove("hidden");
+        }
+    });
 });
 
-window.logoutCustom = () => {
-    localStorage.removeItem("loggedInUser");
-    window.location.reload();
+window.logoutCustom = async () => {
+    try {
+        await signOut(auth);
+        window.location.reload();
+    } catch (e) {
+        showToast("Logout failed: " + e.message, "error");
+    }
 };
 
 document.getElementById("btn-login").addEventListener("click", async (e) => {
@@ -123,77 +225,100 @@ document.getElementById("btn-login").addEventListener("click", async (e) => {
     btn.innerText = "Logging in..."; btn.disabled = true;
 
     try {
-        const hashedPass = await hashPassword(password);
-        const qUsername = query(collection(db, "users"), where("username", "==", identifier));
-        const qName = query(collection(db, "users"), where("name", "==", identifier));
-
-        let snap = await getDocs(qUsername);
-        if (snap.empty) snap = await getDocs(qName);
-
-        if (snap.empty) {
-            showToast("User not found. Please register.", "error");
+        const username = await resolveUsernameFromIdentifier(identifier);
+        const syntheticEmail = toSyntheticEmail(username);
+        await signInWithEmailAndPassword(auth, syntheticEmail, password);
+        // onAuthStateChanged handles showing the app and loading profile
+    } catch (error) {
+        if (
+            error.code === "auth/invalid-credential" ||
+            error.code === "auth/user-not-found" ||
+            error.code === "auth/wrong-password"
+        ) {
+            showToast("Invalid username or password.", "error");
         } else {
-            const userDoc = snap.docs[0];
-            const userData = userDoc.data();
-            if (userData.password === hashedPass) {
-                localStorage.setItem("loggedInUser", userDoc.id);
-                window.location.reload();
-            } else {
-                showToast("Incorrect password", "error");
-            }
+            showToast("Login failed: " + error.message, "error");
         }
-    } catch (error) { showToast("Login failed: " + error.message, "error"); }
-    finally { btn.innerText = "Login"; btn.disabled = false; }
+    } finally {
+        btn.innerText = "Login"; btn.disabled = false;
+    }
 });
 
-document.getElementById("btn-register").addEventListener("click", async () => {
+document.getElementById("btn-register").addEventListener("click", async (e) => {
     if (!platformSettings.register_allowed) {
         return showToast("New registrations are currently disabled by the Administrator.", "error");
     }
 
     const identifier = document.getElementById("login_identifier").value.trim();
     const password = document.getElementById("password").value;
+    const btn = e.target;
 
     if (!identifier || !password) return showToast("Name/Username and Password are required.", "error");
+    if (password.length < 6) return showToast("Password must be at least 6 characters.", "error");
+
+    btn.innerText = "Creating Profile..."; btn.disabled = true;
+    isRegistering = true;
 
     try {
-        const counterRef = doc(db, "metadata", "counter");
-        let counterSnap = await getDoc(counterRef);
-        if (!counterSnap.exists()) {
-            await setDoc(counterRef, { last_uid: 100 });
-            counterSnap = await getDoc(counterRef);
+        let baseUsername = cleanName(identifier);
+        if (!baseUsername) {
+            isRegistering = false;
+            return showToast("Please enter a valid name or username.", "error");
         }
 
-        const newUidNum = counterSnap.data().last_uid + 1;
-        const uidStr = String(newUidNum);
-
-        let baseUsername = cleanName(identifier);
         let finalUsername = baseUsername;
-        const usernameCheck = await getDocs(query(collection(db, "users"), where("username", "==", baseUsername)));
-        if (!usernameCheck.empty) finalUsername = `${baseUsername}_${uidStr}`;
+        const usernameCheck = await getDocs(
+            query(collection(db, "user_directory"), where("username", "==", baseUsername))
+        );
+        if (!usernameCheck.empty) {
+            finalUsername = `${baseUsername}_${Date.now().toString().slice(-4)}`;
+        }
 
-        const hashedPass = await hashPassword(password);
+        const syntheticEmail = toSyntheticEmail(finalUsername);
+        const userCredential = await createUserWithEmailAndPassword(auth, syntheticEmail, password);
+        const uidStr = userCredential.user.uid;
+
         const userData = {
-            uid: uidStr, username: finalUsername, name: identifier, password: hashedPass,
-            exp: document.getElementById("exp").value, city: document.getElementById("city").value,
-            background: document.getElementById("background").value, current_domain: document.getElementById("domain").value,
-            linkedin: document.getElementById("linkedin").value.trim(), contact: document.getElementById("contact").value.trim(),
-            project_domain: document.getElementById("proj_domain").value, project_desc: document.getElementById("proj_desc").value,
-            status: "open", team_id: null, interests_received: [], interests_sent: [], interests_rejected: [], random_matches: [], isAdmin: false
+            uid: uidStr,
+            username: finalUsername,
+            name: identifier,
+            exp: document.getElementById("exp").value,
+            city: document.getElementById("city").value,
+            background: document.getElementById("background").value,
+            current_domain: document.getElementById("domain").value,
+            linkedin: document.getElementById("linkedin").value.trim(),
+            contact: document.getElementById("contact").value.trim(),
+            project_domain: document.getElementById("proj_domain").value,
+            project_desc: document.getElementById("proj_desc").value,
+            status: "open",
+            team_id: null,
+            interests_received: [],
+            interests_sent: [],
+            interests_rejected: [],
+            random_matches: [],
+            isAdmin: false
         };
 
         await setDoc(doc(db, "users", uidStr), userData);
-        await updateDoc(counterRef, { last_uid: newUidNum });
+        await setDoc(doc(db, "user_directory", uidStr), {
+            username: finalUsername,
+            name: identifier
+        });
 
         fetch(WEBHOOK_EMBED_PROFILE, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: uidStr, combinedText: generateEmbeddingText(userData), status: userData.status })
         });
 
-        showToast("Profile created! Logging in...");
-        localStorage.setItem("loggedInUser", uidStr);
+        showToast(`Profile created! Username: ${finalUsername}`);
+        isRegistering = false;
         setTimeout(() => window.location.reload(), 1000);
-    } catch (error) { showToast(error.message, "error"); }
+    } catch (error) {
+        isRegistering = false;
+        showToast("Registration failed: " + error.message, "error");
+    } finally {
+        btn.innerText = "Register & Create Profile"; btn.disabled = false;
+    }
 });
 
 async function loadUserProfile(uid) {
@@ -221,7 +346,6 @@ async function loadUserProfile(uid) {
             document.getElementById("nav-red-dot").classList.remove("hidden");
         }
 
-        // Search tab is always visible now
         document.getElementById("nav-search").classList.remove("hidden");
 
         await loadAllMembers();
@@ -262,7 +386,6 @@ function populateProfileForm(data) {
     document.getElementById("edit_status").value = data.status || "open";
 }
 
-// --- NEW LOGIC: Dynamic Filter Population and Execution ---
 function populateFilterDropdowns() {
     const exps = new Set(), cities = new Set(), backgrounds = new Set();
     const workDomains = new Set(), projDomains = new Set(), statuses = new Set();
@@ -313,8 +436,6 @@ function executeMemberSearch() {
         return true;
     });
 
-    // --- NEW: Sort by Project Idea OR Project Domain presence ---
-    // Users with either a populated project_desc or project_domain float to the top
     filtered.sort((a, b) => {
         const aHasProjectInfo = ((a.project_desc && a.project_desc.trim() !== "") || (a.project_domain && a.project_domain.trim() !== "")) ? 1 : 0;
         const bHasProjectInfo = ((b.project_desc && b.project_desc.trim() !== "") || (b.project_domain && b.project_domain.trim() !== "")) ? 1 : 0;
@@ -324,14 +445,12 @@ function executeMemberSearch() {
     renderUserCards(filtered, "member-search-results", true);
 }
 
-// Bind all filter inputs to trigger the search instantly
 ['filter-name', 'filter-exp', 'filter-city', 'filter-background', 'filter-work', 'filter-project', 'filter-status'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
         el.addEventListener(id === 'filter-name' ? 'input' : 'change', executeMemberSearch);
     }
 });
-
 
 document.getElementById("edit_status").addEventListener("change", (e) => {
     const val = e.target.value;
@@ -354,7 +473,6 @@ document.getElementById("profile-team-search").addEventListener("input", (e) => 
         return;
     }
 
-    // Ensure only "open" members can be manually added to teams
     const filtered = cachedAllMembers.filter(u =>
         u.status === "open" &&
         u.name.toLowerCase().includes(val) &&
@@ -468,6 +586,15 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
 
         await updateDoc(doc(db, "users", currentUserProfile.uid), updatedData);
 
+        // Keep user_directory synced if full name changed
+        if (updatedData.name !== currentUserProfile.name) {
+            await setDoc(
+                doc(db, "user_directory", currentUserProfile.uid),
+                { username: currentUserProfile.username, name: updatedData.name },
+                { merge: true }
+            );
+        }
+
         if (updatedData.status === "solo") {
             await setDoc(doc(db, "projects", currentUserProfile.uid), {
                 type: "solo", members: [{ uid: currentUserProfile.uid, name: updatedData.name }],
@@ -510,6 +637,7 @@ document.getElementById("btn-update-profile").addEventListener("click", async ()
     } catch (e) { showToast("Failed to update profile", "error"); }
 });
 
+// Firebase Auth Password Update (Reauthenticate + Update)
 document.getElementById("btn-change-password").addEventListener("click", async (e) => {
     const currentPass = document.getElementById("current_password").value;
     const newPass = document.getElementById("new_password").value;
@@ -517,28 +645,32 @@ document.getElementById("btn-change-password").addEventListener("click", async (
     const btn = e.target;
 
     if (!currentPass || !newPass || !confirmPass) return showToast("Please fill out all password fields.", "error");
+    if (newPass.length < 6) return showToast("New password must be at least 6 characters.", "error");
     if (newPass !== confirmPass) return showToast("New passwords do not match.", "error");
+
+    const user = auth.currentUser;
+    if (!user) return showToast("Session expired. Please log in again.", "error");
 
     btn.innerText = "Updating..."; btn.disabled = true;
 
     try {
-        const hashedCurrent = await hashPassword(currentPass);
-        const userRef = doc(db, "users", currentUserProfile.uid);
-        const userSnap = await getDoc(userRef);
+        const credential = EmailAuthProvider.credential(user.email, currentPass);
+        await reauthenticateWithCredential(user, credential);
+        await updatePassword(user, newPass);
 
-        if (userSnap.exists() && userSnap.data().password === hashedCurrent) {
-            const hashedNew = await hashPassword(newPass);
-            await updateDoc(userRef, { password: hashedNew });
-            showToast("Password updated successfully!");
-            document.getElementById("current_password").value = "";
-            document.getElementById("new_password").value = "";
-            document.getElementById("confirm_password").value = "";
-            currentUserProfile.password = hashedNew;
-        } else {
+        showToast("Password updated successfully!");
+        document.getElementById("current_password").value = "";
+        document.getElementById("new_password").value = "";
+        document.getElementById("confirm_password").value = "";
+    } catch (error) {
+        if (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password") {
             showToast("Incorrect current password.", "error");
+        } else {
+            showToast("Failed to update password: " + error.message, "error");
         }
-    } catch (error) { showToast("Failed to update password.", "error"); }
-    finally { btn.innerText = "Update Password"; btn.disabled = false; }
+    } finally {
+        btn.innerText = "Update Password"; btn.disabled = false;
+    }
 });
 
 function renderUserCards(usersDataArray, containerId, allowActions = true, isSentTab = false) {
@@ -563,10 +695,8 @@ function renderUserCards(usersDataArray, containerId, allowActions = true, isSen
             } else if (rejectedInterests.includes(u.id)) {
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity: 0.5; border-color: rgba(244,63,94,0.4); color: var(--danger); cursor: not-allowed;">Rejected</button>`;
             } else if (u.status === "open") {
-                // Ensure send interest button is ONLY available if the target is still "open"
                 actionButtons = `<button class="btn btn-outline" id="btn-send-${u.id}" onclick="sendInterest('${u.id}')">Send Interest</button>`;
             } else {
-                // Member is Solo or Teamed Up, do not show interest button
                 actionButtons = `<button class="btn btn-outline" disabled style="opacity:0.5; border-color:rgba(255,255,255,0.2); color:#a1a1aa; cursor:not-allowed;">Unavailable</button>`;
             }
         } else if (isSentTab) {
@@ -626,7 +756,6 @@ async function fetchAndRenderUsers(uidArray, containerId, allowActions = true, i
     renderUserCards(allUsers, containerId, allowActions, isSentTab);
 }
 
-// Fetches ALL users (not just open) into cache to allow comprehensive filtering
 async function loadAllMembers() {
     const q = query(collection(db, "users"));
     const querySnapshot = await getDocs(q);
@@ -639,7 +768,7 @@ async function loadAllMembers() {
     cachedAllMembers = allUsers;
 
     populateFilterDropdowns();
-    executeMemberSearch(); // Renders initial list based on default "Any" filters
+    executeMemberSearch();
 }
 
 window.loadAllProjects = async () => {
