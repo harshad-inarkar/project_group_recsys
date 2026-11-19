@@ -73,16 +73,16 @@ As shown below, the Qdrant search node queries `{{ $json.body.combinedText }}` w
 
 ```text
 .
-├── index.html                    # Single-page UI (Auth, Profile, Search, Projects, Admin)
+project-group-recsys/
+├── index.html
+├── README.md
 ├── js/
-│   └── app.js                    # Firebase Auth, Firestore CRUD, Filtering, & Webhook calls
-├── scripts/
-│   ├── bulk_register.py          # Bulk-import learners from CSV into Firestore & Qdrant
-│   ├── sync_firestore_to_qdrant.py # Re-embed all existing Firestore users into Qdrant
-│   └── migrate_to_firebase_auth.py # One-time migration of SHA-256 users to Firebase Auth
-├── n8n_workflow.png              # n8n dual-pipeline architecture diagram
-├── n8n_retrieval_topk.png        # Qdrant Top-K retrieval configuration & sample output
-└── README.md
+│   └── app.js
+└── data/
+    ├── n8n_project_group_recsys.json
+    ├── n8n_workflow.png
+    └── n8n_retrieval_topk.png
+
 ```
 
 ---
